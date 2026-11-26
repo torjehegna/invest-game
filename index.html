@@ -38,13 +38,18 @@ input{font:inherit;padding:10px 12px;border:1px solid #cfcdc5;border-radius:var(
 .ctl{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
 .ctl input{width:90px;padding:8px}
 .ctl button{padding:8px 12px;font-size:15px}
+.ctl{position:relative}
 .ctl .sp{flex:1}
+.menu{position:absolute;right:10px;top:calc(100% + 6px);background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;z-index:30;min-width:240px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.menu .row{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--ink)}
+.menu .row input[type=password]{width:120px;padding:6px 8px}
+.menu button{text-align:left;font-size:15px;padding:8px 10px}
 .ctl .quiet{display:inline-flex;gap:4px;margin-right:6px}
 .ctl .quiet button{font-size:13px;padding:6px 9px;color:var(--sub);border-color:#e2e0d9;background:transparent}
 .ctl label{font-size:14px;color:var(--sub);display:flex;gap:6px;align-items:center}
 .ctl label input{width:auto}
 .hideCtl{position:fixed;right:10px;bottom:10px;font-size:13px;padding:6px 10px;opacity:.6;z-index:9}
-.head{display:flex;align-items:baseline;gap:18px;margin:4px 0 12px}
+.head{display:flex;align-items:baseline;gap:14px;margin:4px 0 12px;flex-wrap:wrap}
 .head h2{font-size:28px;margin:0;font-weight:600}
 .metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:12px}
 .metric{background:#efede7;border-radius:12px;padding:12px 14px}
@@ -73,7 +78,7 @@ input{font:inherit;padding:10px 12px;border:1px solid #cfcdc5;border-radius:var(
 .tbl th{font-weight:500;color:var(--sub);font-size:15px}
 .tbl td:first-child,.tbl th:first-child{text-align:left}
 .seg{display:inline-flex;border:1px solid #cfcdc5;border-radius:var(--r);overflow:hidden}
-.seg button{border:0;border-radius:0;padding:7px 12px;font-size:14px}
+.seg button{border:0;border-radius:0;padding:7px 12px;font-size:14px;white-space:nowrap}
 .seg button.on{background:var(--ink);color:#fff}
 svg.fit{display:block;width:100%;height:auto;max-height:var(--fitH,60vh);margin:0 auto}
 svg text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
@@ -302,6 +307,7 @@ async function stuSubmit() {
 let pin = localStorage.getItem('ig_pin') || '', showCtl = true, showLB = localStorage.getItem('ig_lb') !== '0';
 const COIN_SPIN = 2000, COIN_HOLD = 500;
 let coinEnd = 0;
+let menuOpen = false, manualCoin = localStorage.getItem('ig_manual') === '1';
 let distSet = 'preset', distLinear = false, distView = 'dist', mmAxis = 'log', msg = '', coinShown = -1, simRAF = 0, renderedKey = '';
 
 async function brdPoll(force) {
@@ -318,7 +324,7 @@ async function teach(a, extra) {
   if (a === 'new' && !confirm('Start a new session? Students must join again.')) return;
   try {
     const j = await api(Object.assign({a, pin, role: 'board'}, extra || {}));
-    if (!j.ok) { msg = j.error; brdCtl(); return; }
+    if (!j.ok) { msg = j.error === 'Wrong PIN' ? 'Wrong or missing PIN: enter it in the ⋯ menu' : j.error; if (j.error === 'Wrong PIN') menuOpen = true; brdCtl(); return; }
     msg = ''; data = j; lastV = j.v; brdRender();
   } catch (e) { msg = 'No connection to the server.'; brdCtl(); }
 }
@@ -341,42 +347,58 @@ function primaryAction() {
 function brdCtl() {
   let el = $('#ctl');
   if (!el) return;
+  if (document.activeElement && document.activeElement.id === 'pin') return; // don't redraw while the PIN is being typed
   if (!showCtl) { el.innerHTML = ''; el.style.display = 'none'; $('#ctlbtn').style.display = 'block'; return; }
   el.style.display = 'flex'; $('#ctlbtn').style.display = 'none';
   const d = data || {}, pa = primaryAction();
-  let h = `<input id="pin" type="password" placeholder="PIN" value="${esc(pin)}">`;
-  if (pa) h += `<button class="primary" data-a="${pa[0]}">${pa[1]}</button>`;
-  if (d.phase === 'round_open') h += `<span class="muted" style="font-size:14px">Manual:</span><button data-a="flip" data-o="H">Heads</button><button data-a="flip" data-o="T">Tails</button>`;
-  if (d.phase === 'round_closed' && d.round < d.rounds) h += `<button data-a="results">End early: show results</button>`;
+  let h = '';
+  if (pa && !(manualCoin && pa[0] === 'flip')) h += `<button class="primary" data-a="${pa[0]}">${pa[1]}</button>`;
+  if (d.phase === 'round_open' && manualCoin) h += `<button class="primary" data-a="flip" data-o="H">Heads</button><button class="primary" data-a="flip" data-o="T">Tails</button>`;
   const hasSim = !!((d.commits || [])[d.commitNo - 1] || {}).path;
   if ((d.phase === 'sim' || d.phase === 'dist') && hasSim) h += `<button data-a="resim">New simulation</button>`;
-  if (d.phase === 'dist' && hasSim) h += `<button data-a="dist-back" data-local="1">Back to simulation</button>`;
-  h += `<label><input type="checkbox" id="lbx" ${showLB ? 'checked' : ''}> Leaderboard</label>`;
+  if (d.phase === 'dist' && hasSim) h += `<button data-a="dist-back">Back to simulation</button>`;
   h += `<span class="sp"></span><span class="err" style="margin:0">${esc(msg)}</span>`;
   h += `<span class="quiet"><button data-a="back">← Back</button><button data-a="restart">Round-by-round game</button><button data-a="jump" data-to="commit">Fixed-share game</button><button data-a="jump" data-to="dist">Distributions</button></span>`;
-  h += `<button id="csv">Export CSV</button><button data-a="new">New session</button><button id="hide">Hide controls</button>`;
+  h += `<button id="more" aria-label="More" style="font-size:18px;padding:4px 12px;line-height:1">⋯</button>`;
+  if (menuOpen) {
+    h += `<div class="menu" id="menu">
+      <label class="row">PIN <input id="pin" type="password" value="${esc(pin)}" autocomplete="off"></label>
+      <label class="row"><input type="checkbox" id="mcx" ${manualCoin ? 'checked' : ''}> Manual coin (real coin)</label>
+      <label class="row"><input type="checkbox" id="lbx" ${showLB ? 'checked' : ''}> Leaderboard</label>
+      ${d.phase === 'round_closed' && d.round < d.rounds ? '<button data-a="results">End early: show results</button>' : ''}
+      <button id="csv">Export CSV</button>
+      <button data-a="new">New session</button>
+      <button id="hide">Hide controls</button></div>`;
+  }
   el.innerHTML = h;
-  $('#pin').oninput = e => { pin = e.target.value; localStorage.setItem('ig_pin', pin); };
   el.querySelectorAll('button[data-a]').forEach(b => b.onclick = () => {
-    if (b.dataset.a === 'dist-back') { data.phase = 'sim'; data.simStart = nowS() - 1e7; brdRender(); return; }
     const a = b.dataset.a;
+    if (a === 'dist-back') { data.phase = 'sim'; data.simStart = nowS() - 1e7; brdRender(); return; }
     if (a === 'back' && data && data.phase === 'round_closed' && !confirm('Undo the last coin flip? The students keep their choices for this round.')) return;
     if (a === 'back' && data && ['commit_closed', 'sim', 'dist'].indexOf(data.phase) >= 0 && (data.commits || []).length && !confirm('Reopen the fixed-share choice? The simulations are discarded.')) return;
     if (a === 'restart' && !confirm('Start the round-by-round game again with the same players? Everyone goes back to 1000 kr. The data from this run stays in the spreadsheet.')) return;
     if (a === 'jump' && !confirm(b.dataset.to === 'commit' ? 'Go to the fixed-share game?' : 'Go to the distributions?')) return;
+    if (b.closest('#menu')) menuOpen = false;
     teach(a, b.dataset.o ? {o: b.dataset.o} : b.dataset.to ? {to: b.dataset.to} : null);
   });
-  $('#lbx').onchange = e => { showLB = e.target.checked; localStorage.setItem('ig_lb', showLB ? '1' : '0'); brdRender(true); };
-  $('#csv').onclick = exportCSV;
-  $('#hide').onclick = () => { showCtl = false; brdCtl(); };
+  $('#more').onclick = e => { e.stopPropagation(); menuOpen = !menuOpen; brdCtl(); };
+  if (menuOpen) {
+    $('#menu').onclick = e => e.stopPropagation();
+    $('#pin').oninput = e => { pin = e.target.value; localStorage.setItem('ig_pin', pin); };
+    $('#mcx').onchange = e => { manualCoin = e.target.checked; localStorage.setItem('ig_manual', manualCoin ? '1' : '0'); brdCtl(); };
+    $('#lbx').onchange = e => { showLB = e.target.checked; localStorage.setItem('ig_lb', showLB ? '1' : '0'); brdRender(true); };
+    $('#csv').onclick = () => { exportCSV(); menuOpen = false; brdCtl(); };
+    $('#hide').onclick = () => { menuOpen = false; showCtl = false; brdCtl(); };
+  }
 }
 
 function brdShell() {
   $('#app').innerHTML = `<div class="brd"><div class="ctl" id="ctl"></div><button class="hideCtl" id="ctlbtn" style="display:none">Controls</button><div class="stage" id="stage"></div></div>`;
   $('#ctlbtn').onclick = () => { showCtl = true; brdCtl(); };
+  document.addEventListener('click', () => { if (menuOpen) { menuOpen = false; brdCtl(); } });
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.code === 'Space' || e.key === 'ArrowRight') { e.preventDefault(); const pa = primaryAction(); if (pa && pa[0] !== 'new') teach(pa[0]); }
+    if (e.code === 'Space' || e.key === 'ArrowRight') { e.preventDefault(); const pa = primaryAction(); if (pa && pa[0] !== 'new' && !(manualCoin && pa[0] === 'flip')) teach(pa[0]); }
     if (e.key === 'c') { showCtl = !showCtl; brdCtl(); }
   });
 }
@@ -385,7 +407,7 @@ function brdRender(force) {
   brdCtl();
   const d = data, st = $('#stage');
   if (simRAF) { cancelAnimationFrame(simRAF); simRAF = 0; }
-  if (!d || d.phase === 'none') { st.innerHTML = `<div class="huge">Investment game</div><p class="center sub">Enter the PIN and press “New session”.</p>`; return; }
+  if (!d || d.phase === 'none') { st.innerHTML = `<div class="huge">Investment game</div><p class="center sub">Open the ⋯ menu at the top right, enter the PIN and press “New session”.</p>`; return; }
   const P = d.players || [];
   if (d.phase === 'round_closed' && coinShown !== d.outcomes.length + ':' + d.revealAt) {
     coinShown = d.outcomes.length + ':' + d.revealAt;
@@ -465,13 +487,13 @@ function brdRender(force) {
     if (distSet === 'class' && commits.length) { const u = commits.slice().sort((a, b) => a - b); shares = [...new Set([u[0], median(u) - median(u) % 10, u[u.length - 1]])]; }
     const views = `<span class="seg"><button data-v="dist" class="${distView === 'dist' ? 'on' : ''}">Distributions</button><button data-v="mm" class="${distView === 'mm' ? 'on' : ''}">Median vs average</button></span>`;
     if (distView === 'dist') {
-      h = `<div class="head"><h2>Wealth after ${d.simRounds} rounds: all possible paths</h2>${views}
+      h = `<div class="head"><h2>All paths, ${d.simRounds} rounds</h2>${views}
         <span class="seg"><button data-ds="preset" class="${distSet === 'preset' ? 'on' : ''}">10 · 50 · 100%</button><button data-ds="two" class="${distSet === 'two' ? 'on' : ''}">50 · 100%</button><button data-ds="class" class="${distSet === 'class' ? 'on' : ''}">Players: low · median · high</button></span>
         <span class="seg"><button data-ax="log" class="${!distLinear ? 'on' : ''}">Log scale</button><button data-ax="lin" class="${distLinear ? 'on' : ''}">Kroner</button></span></div>
         <div class="panel" style="--fitH:calc(100vh - 380px)">${distChart(shares, commits, d.simRounds, distLinear)}</div>
         <div class="panel" style="margin-top:12px">${probTable(shares, d.simRounds)}</div>`;
     } else {
-      h = `<div class="head"><h2>Median and average wealth after ${d.simRounds} rounds</h2>${views}
+      h = `<div class="head"><h2>Median vs average, ${d.simRounds} rounds</h2>${views}
         <span class="seg"><button data-mx="log" class="${mmAxis === 'log' ? 'on' : ''}">Log scale</button><button data-mx="lin" class="${mmAxis === 'lin' ? 'on' : ''}">Kroner</button><button data-mx="full" class="${mmAxis === 'full' ? 'on' : ''}">Kroner, full scale</button></span></div>
         <div class="panel" style="--fitH:calc(100vh - 210px)">${mmChart(commits, d.simRounds, mmAxis)}</div>`;
     }
