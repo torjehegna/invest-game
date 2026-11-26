@@ -73,6 +73,7 @@ input{font:inherit;padding:10px 12px;border:1px solid #cfcdc5;border-radius:var(
 .seg{display:inline-flex;border:1px solid #cfcdc5;border-radius:var(--r);overflow:hidden}
 .seg button{border:0;border-radius:0;padding:7px 12px;font-size:14px}
 .seg button.on{background:var(--ink);color:#fff}
+svg.fit{display:block;width:100%;height:auto;max-height:var(--fitH,60vh);margin:0 auto}
 svg text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 </style>
 </head>
@@ -186,7 +187,7 @@ function stuRender() {
   if (d.phase === 'none') { app.innerHTML = h + `<p>Waiting for the teacher to start the game.</p><div class="err">${esc(stuErr)}</div></div>`; return; }
   const joined = me && d.me && me.session === d.session;
   if (!joined) {
-    h += `<h1>Join the game</h1><p class="sub">Use the same name as in the risk survey.</p>
+    h += `<h1>Join the game</h1><p class="sub">Choose a name. It is shown on the board.</p>
       <input id="nm" maxlength="24" placeholder="Your name" value="${esc(me && me.name || '')}" autocomplete="off">
       <div class="err" id="jerr">${esc(stuErr)}</div>
       <button class="primary wide" id="jb">Join</button></div>`;
@@ -235,6 +236,7 @@ function stuRender() {
     if (pickKey !== key) { pickKey = key; pick = m.commit; saved = m.commit != null ? 'ok' : ''; }
     const s = pick;
     h += `<h1>New game: one fixed share</h1><p class="sub">You start again with ${kr(START)} kr. Choose one share for the fund. <b>This share will be used in every round</b>, ${d.simRounds} rounds in total. Watch the board.</p>
+      <div class="card"><b>The fund, each round</b><br>Heads (50%): +100%<br>Tails (50%): −50%<br><span class="muted">on the amount you invest. The rest stays in the bank at 0%.</span></div>
       <div class="card"><div class="grid11">${[0,10,20,30,40,50,60,70,80,90,100].map(v => `<button data-s="${v}" class="${s === v ? 'sel' : ''}">${v}%</button>`).join('')}</div>
       <div class="split"><div class="f" style="width:${s || 0}%"></div></div></div>
       <button class="primary wide" id="sb">${saved === 'ok' && m.commit === s ? 'Locked in ✓ (tap a share to change)' : 'Lock in my share'}</button><div class="err">${esc(stuErr)}</div>`;
@@ -296,7 +298,9 @@ async function stuSubmit() {
 /* ============================= BOARD =============================== */
 /* =================================================================== */
 let pin = localStorage.getItem('ig_pin') || '', showCtl = true, showLB = localStorage.getItem('ig_lb') !== '0';
-let distSet = 'preset', distLinear = false, msg = '', coinShown = -1, simRAF = 0, renderedKey = '';
+const COIN_SPIN = 2000, COIN_HOLD = 500;
+let coinEnd = 0;
+let distSet = 'preset', distLinear = false, distView = 'dist', mmAxis = 'log', msg = '', coinShown = -1, simRAF = 0, renderedKey = '';
 
 async function brdPoll(force) {
   try {
@@ -342,7 +346,7 @@ function brdCtl() {
   if (pa) h += `<button class="primary" data-a="${pa[0]}">${pa[1]}</button>`;
   if (d.phase === 'round_open') h += `<span class="muted" style="font-size:14px">Manual:</span><button data-a="flip" data-o="H">Heads</button><button data-a="flip" data-o="T">Tails</button>`;
   if (d.phase === 'round_closed' && d.round < d.rounds) h += `<button data-a="results">End early: show results</button>`;
-  if (d.phase === 'sim' || d.phase === 'dist') h += `<button data-a="play">Replay</button>`;
+  if (d.phase === 'sim' || d.phase === 'dist') h += `<button data-a="resim">New simulation</button>`;
   if (d.phase === 'dist') h += `<button data-a="dist-back" data-local="1">Back to simulation</button>`;
   h += `<label><input type="checkbox" id="lbx" ${showLB ? 'checked' : ''}> Leaderboard</label>`;
   h += `<span class="sp"></span><span class="err" style="margin:0">${esc(msg)}</span>`;
@@ -362,7 +366,7 @@ function brdShell() {
   $('#app').innerHTML = `<div class="brd"><div class="ctl" id="ctl"></div><button class="hideCtl" id="ctlbtn" style="display:none">Controls</button><div class="stage" id="stage"></div></div>`;
   $('#ctlbtn').onclick = () => { showCtl = true; brdCtl(); };
   document.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT') return;
+    if (e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.code === 'Space' || e.key === 'ArrowRight') { e.preventDefault(); const pa = primaryAction(); if (pa && pa[0] !== 'new') teach(pa[0]); }
     if (e.key === 'c') { showCtl = !showCtl; brdCtl(); }
   });
@@ -374,7 +378,11 @@ function brdRender(force) {
   if (simRAF) { cancelAnimationFrame(simRAF); simRAF = 0; }
   if (!d || d.phase === 'none') { st.innerHTML = `<div class="huge">Investment game</div><p class="center sub">Enter the PIN and press “New session”.</p>`; return; }
   const P = d.players || [];
-  const flipping = d.phase === 'round_closed' && nowS() < d.revealAt;
+  if (d.phase === 'round_closed' && coinShown !== d.outcomes.length) {
+    coinShown = d.outcomes.length;
+    if (nowS() < d.revealAt) { coinEnd = Date.now() + COIN_SPIN + COIN_HOLD; setTimeout(() => brdRender(true), COIN_SPIN + COIN_HOLD + 30); }
+  }
+  const flipping = d.phase === 'round_closed' && Date.now() < coinEnd;
   let h = '';
   if (d.phase === 'lobby') {
     const link = location.origin + location.pathname + '?g=' + encodeURIComponent(G) + (QS.get('api') ? '&api=' + encodeURIComponent(QS.get('api')) : '');
@@ -393,22 +401,20 @@ function brdRender(force) {
     h += `<div class="head"><h2>Round ${d.round} of ${d.rounds}</h2>`;
     if (d.phase === 'round_open') h += `<span style="font-size:28px" class="sub"><b style="color:var(--ink)">${d.nSubmitted}</b> of ${d.nEligible} submitted</span>`;
     else if (!flipping) h += `<span class="banner ${o === 'H' ? 'gain' : 'loss'}">${o === 'H' ? 'Heads: fund +100%' : 'Tails: fund −50%'}</span>`;
-    h += `</div>` + metricsRow(P, r, d) + `<div class="two"><div class="panel">${pathsChart(P, r, d)}</div><div class="panel">${sharesChart(P, r, d)}</div></div>`;
+    h += `</div>` + metricsRow(P, r, d) + `<div class="two" style="--fitH:calc(100vh - 310px)"><div class="panel">${pathsChart(P, r, d)}</div><div class="panel">${sharesChart(P, r, d)}</div></div>`;
     if (flipping) h += `<div class="overlay" id="ov"><div class="coin" id="coin"><div class="face h">+100%<small>Heads</small></div><div class="face t">−50%<small>Tails</small></div></div></div>`;
     st.innerHTML = h;
     if (flipping) {
-      const n = d.outcomes.length;
-      if (coinShown !== n) { coinShown = n; brdRender.coin = {t0: nowS(), dur: Math.max(900, d.revealAt - nowS())}; setTimeout(() => brdRender(true), brdRender.coin.dur + 250); }
-      const cs = brdRender.coin, end = 360 * 6 + (o === 'T' ? 180 : 0);
-      const an = $('#coin').animate([{transform: 'translateY(0) rotateY(0deg)'}, {transform: 'translateY(-130px) rotateY(' + end * 0.6 + 'deg)', offset: 0.45}, {transform: 'translateY(0) rotateY(' + end + 'deg)'}], {duration: cs.dur, easing: 'cubic-bezier(.25,.6,.35,1)', fill: 'forwards'});
-      an.currentTime = Math.min(cs.dur, nowS() - cs.t0);
+      const end = 360 * 5 + (o === 'T' ? 180 : 0), t0 = coinEnd - COIN_SPIN - COIN_HOLD;
+      const an = $('#coin').animate([{transform: 'translateY(0) rotateY(0deg)'}, {transform: 'translateY(-130px) rotateY(' + end * 0.6 + 'deg)', offset: 0.45}, {transform: 'translateY(0) rotateY(' + end + 'deg)'}], {duration: COIN_SPIN, easing: 'cubic-bezier(.25,.6,.35,1)', fill: 'forwards'});
+      an.currentTime = Math.min(COIN_SPIN, Date.now() - t0);
     }
     return;
   }
   if (d.phase === 'results') {
     const r = d.round;
     h += `<div class="head"><h2>Result after ${r} rounds</h2></div>` + metricsRow(P, r, d);
-    h += `<div class="${showLB ? 'three' : 'two'}">`;
+    h += `<div class="${showLB ? 'three' : 'two'}" style="--fitH:calc(100vh - 330px)">`;
     if (showLB) h += `<div class="panel">${leaderboard(P.filter(p => p.w[r] != null).map(p => [p.name, p.w[r]]))}</div>`;
     h += `<div class="panel"><p class="cap">Fixed shares on the same ${r} coin flips</p>${shadowChart(P, r, d)}</div>`;
     h += `<div class="panel"><p class="cap">Average share after a loss and after a gain</p>${slopeChart(P, d)}</div></div>`;
@@ -417,17 +423,22 @@ function brdRender(force) {
   const c = (d.commits || [])[d.commitNo - 1] || {shares: {}};
   if (d.phase === 'commit_open') {
     h = `<div class="huge" style="font-size:54px">New game: one fixed share</div><p class="center sub" style="font-size:24px">Start again with 1000 kr. Your share is used in all ${d.simRounds} rounds.</p>
+      <div class="center" style="margin-top:22px"><div style="display:inline-flex;gap:28px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 28px;font-size:26px">
+        <span>Each round, 50/50:</span><span class="gain"><b>Heads</b> fund +100%</span><span class="loss"><b>Tails</b> fund −50%</span><span class="sub">Bank 0%</span></div></div>
       <div class="huge">${d.nSubmitted} <span class="sub" style="font-size:40px">of ${d.nEligible} locked in</span></div>`;
     st.innerHTML = h; return;
   }
   if (d.phase === 'commit_closed') {
     const sh = Object.values(c.shares);
-    h = `<div class="head"><h2>Shares are locked</h2><span class="sub" style="font-size:22px">${sh.length} players · press Play</span></div><div class="panel">${commitStrip(sh)}</div>`;
+    h = `<div class="head"><h2>Shares are locked</h2><span class="sub" style="font-size:22px">${sh.length} players · press Play</span></div><div class="panel" style="--fitH:calc(100vh - 230px)">${commitStrip(sh)}</div>`;
     st.innerHTML = h; return;
   }
   if (d.phase === 'sim') {
-    st.innerHTML = `<div class="head"><h2>${d.simRounds} rounds with a fixed share</h2><span id="simr" class="sub" style="font-size:22px"></span></div>
-      <div class="${showLB ? 'two' : ''}" style="${showLB ? 'grid-template-columns:minmax(0,2.4fr) minmax(0,1fr)' : ''}"><div class="panel" id="simp"></div>${showLB ? '<div class="panel" id="simlb"></div>' : ''}</div>`;
+    const paths = c.paths && c.paths.length ? c.paths : [c.path];
+    const best = paths.map(pa => { let bs = null, bw = -1; Object.values(c.shares).forEach(s => { if (s == null) return; const w = simW(s, pa); if (w > bw) { bw = w; bs = s; } }); return bs; });
+    const hist = paths.length > 1 ? `<span class="sub" style="font-size:18px">Best share: ${best.map((b, i) => (i === best.length - 1 ? '<b style="color:var(--ink)">' : '') + '#' + (i + 1) + ' ' + b + '%' + (i === best.length - 1 ? '</b>' : '')).join(' · ')}</span>` : '';
+    st.innerHTML = `<div class="head"><h2>${d.simRounds} rounds with a fixed share${paths.length > 1 ? ` · simulation ${paths.length}` : ''}</h2><span id="simr" class="sub" style="font-size:22px"></span>${hist}</div>
+      <div class="${showLB ? 'two' : ''}" style="--fitH:calc(100vh - 220px);${showLB ? 'grid-template-columns:minmax(0,2.4fr) minmax(0,1fr)' : ''}"><div class="panel" id="simp"></div>${showLB ? '<div class="panel" id="simlb"></div>' : ''}</div>`;
     const groups = simGroups(c), endT = d.simStart + d.simRounds * d.simStepMs;
     const tick = () => {
       const k = Math.max(0, Math.min(d.simRounds, Math.floor((nowS() - d.simStart) / d.simStepMs)));
@@ -443,14 +454,23 @@ function brdRender(force) {
     let shares = [10, 50, 100];
     if (distSet === 'two') shares = [50, 100];
     if (distSet === 'class' && commits.length) { const u = commits.slice().sort((a, b) => a - b); shares = [...new Set([u[0], median(u) - median(u) % 10, u[u.length - 1]])]; }
-    h = `<div class="head"><h2>Wealth after ${d.simRounds} rounds: all possible paths</h2>
-      <span class="seg"><button data-ds="preset" class="${distSet === 'preset' ? 'on' : ''}">10 · 50 · 100%</button><button data-ds="two" class="${distSet === 'two' ? 'on' : ''}">50 · 100%</button><button data-ds="class" class="${distSet === 'class' ? 'on' : ''}">Class: low · median · high</button></span>
-      <span class="seg"><button data-ax="log" class="${!distLinear ? 'on' : ''}">Log scale</button><button data-ax="lin" class="${distLinear ? 'on' : ''}">Kroner</button></span></div>
-      <div class="panel">${distChart(shares, commits, d.simRounds, distLinear)}</div>
-      <div class="panel" style="margin-top:12px">${probTable(shares, d.simRounds)}</div>`;
+    const views = `<span class="seg"><button data-v="dist" class="${distView === 'dist' ? 'on' : ''}">Distributions</button><button data-v="mm" class="${distView === 'mm' ? 'on' : ''}">Median vs average</button></span>`;
+    if (distView === 'dist') {
+      h = `<div class="head"><h2>Wealth after ${d.simRounds} rounds: all possible paths</h2>${views}
+        <span class="seg"><button data-ds="preset" class="${distSet === 'preset' ? 'on' : ''}">10 · 50 · 100%</button><button data-ds="two" class="${distSet === 'two' ? 'on' : ''}">50 · 100%</button><button data-ds="class" class="${distSet === 'class' ? 'on' : ''}">Class: low · median · high</button></span>
+        <span class="seg"><button data-ax="log" class="${!distLinear ? 'on' : ''}">Log scale</button><button data-ax="lin" class="${distLinear ? 'on' : ''}">Kroner</button></span></div>
+        <div class="panel" style="--fitH:calc(100vh - 380px)">${distChart(shares, commits, d.simRounds, distLinear)}</div>
+        <div class="panel" style="margin-top:12px">${probTable(shares, d.simRounds)}</div>`;
+    } else {
+      h = `<div class="head"><h2>Median and average wealth after ${d.simRounds} rounds</h2>${views}
+        <span class="seg"><button data-mx="log" class="${mmAxis === 'log' ? 'on' : ''}">Log scale</button><button data-mx="lin" class="${mmAxis === 'lin' ? 'on' : ''}">Kroner</button><button data-mx="full" class="${mmAxis === 'full' ? 'on' : ''}">Kroner, full scale</button></span></div>
+        <div class="panel" style="--fitH:calc(100vh - 210px)">${mmChart(commits, d.simRounds, mmAxis)}</div>`;
+    }
     st.innerHTML = h;
+    st.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { distView = b.dataset.v; brdRender(true); });
     st.querySelectorAll('[data-ds]').forEach(b => b.onclick = () => { distSet = b.dataset.ds; brdRender(true); });
     st.querySelectorAll('[data-ax]').forEach(b => b.onclick = () => { distLinear = b.dataset.ax === 'lin'; brdRender(true); });
+    st.querySelectorAll('[data-mx]').forEach(b => b.onclick = () => { mmAxis = b.dataset.mx; brdRender(true); });
   }
 }
 
@@ -471,7 +491,7 @@ function pathsChart(P, r, d) {
   const vals = []; P.forEach(p => p.w.forEach((v, i) => { if (v != null && i <= r) vals.push(v); }));
   const lo = Math.min(START * 0.5, ...vals) * 0.85, hi = Math.max(START * 2, ...vals) * 1.2;
   const x = i => ml + i / d.rounds * (W - ml - mr), y = logScale(lo, hi, H - mb, mt);
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="fit">`;
   niceLogTicks(lo, hi).forEach(v => s += `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}" stroke="${C.grid}"/>` + T(ml - 8, y(v) + 5, kr(v), {a: 'end'}));
   s += `<line x1="${ml}" x2="${W - mr}" y1="${y(START)}" y2="${y(START)}" stroke="${C.base}" stroke-width="1.5" stroke-dasharray="6 5"/>`;
   for (let i = 0; i <= d.rounds; i++) s += T(x(i), H - mb + 22, i, {a: 'middle'});
@@ -485,7 +505,7 @@ function pathsChart(P, r, d) {
 function sharesChart(P, r, d) {
   const W = 620, H = 360, ml = 56, mr = 14, mt = 14, mb = 44;
   const x = i => ml + (i - 0.5) / d.rounds * (W - ml - mr), y = f => mt + (H - mt - mb) * (1 - f / 100);
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="fit">`;
   [0, 25, 50, 75, 100].forEach(f => s += `<line x1="${ml}" x2="${W - mr}" y1="${y(f)}" y2="${y(f)}" stroke="${C.grid}"/>` + T(ml - 8, y(f) + 5, f + '%', {a: 'end'}));
   for (let i = 1; i <= d.rounds; i++) {
     s += T(x(i), H - mb + 20, i, {a: 'middle'});
@@ -514,7 +534,7 @@ function shadowChart(P, r, d) {
   const W = 520, H = 320, ml = 92, mr = 20, mt = 10, mb = 40, x = logScale(lo, hi, ml, W - mr);
   const rows = [['Students', null]].concat(fixed.map(f => ['Fixed ' + f[0] + '%', f]));
   const rowY = i => mt + 24 + i * ((H - mt - mb - 24) / (rows.length - 1));
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="fit">`;
   niceLogTicks(lo, hi).forEach(v => s += `<line x1="${x(v)}" x2="${x(v)}" y1="${mt}" y2="${H - mb}" stroke="${C.grid}"/>` + T(x(v), H - mb + 20, kr(v), {a: 'middle', fs: 13}));
   s += `<line x1="${x(START)}" x2="${x(START)}" y1="${mt}" y2="${H - mb}" stroke="${C.base}" stroke-dasharray="5 4" stroke-width="1.5"/>`;
   rows.forEach((rw, i) => {
@@ -538,7 +558,7 @@ function slopeChart(P, d) {
   });
   if (!rows.length) return `<p class="sub" style="font-size:18px;margin:40px 10px">Needs at least one gain and one loss before the last round.</p>`;
   const W = 420, H = 330, ml = 56, mr = 30, mt = 36, mb = 40, x0 = ml + 30, x1 = W - mr - 30, y = f => mt + (H - mt - mb) * (1 - f / 100);
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="fit">`;
   [0, 25, 50, 75, 100].forEach(f => s += `<line x1="${ml}" x2="${W - mr}" y1="${y(f)}" y2="${y(f)}" stroke="${C.grid}"/>` + T(ml - 8, y(f) + 5, f + '%', {a: 'end'}));
   s += T(x0, H - 12, 'After a loss', {a: 'middle', c: C.sub}) + T(x1, H - 12, 'After a gain', {a: 'middle', c: C.sub});
   let up = 0;
@@ -549,7 +569,7 @@ function slopeChart(P, d) {
 
 function commitStrip(sh) {
   const W = 1100, H = 170, ml = 30, mr = 30, x = s => ml + s / 100 * (W - ml - mr);
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="fit">`;
   const cnt = {}; sh.forEach(v => cnt[v] = (cnt[v] || 0) + 1);
   [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].forEach(v => s += T(x(v), H - 8, v + '%', {a: 'middle', fs: 16}));
   Object.entries(cnt).forEach(([v, n]) => { for (let i = 0; i < n; i++) s += `<circle cx="${x(+v)}" cy="${H - 34 - i * 20}" r="8" fill="${shareCol(+v)}"/>`; });
@@ -568,7 +588,7 @@ function simChart(groups, path, k, n) {
   const paths = groups.map(g => { const a = [START]; for (let i = 0; i < n; i++) a.push(step(a[i], g.s, path[i])); return a; });
   const all = paths.flat(), lo = Math.min(START, ...all) * 0.6, hi = Math.max(START, ...all) * 1.6;
   const x = i => ml + i / n * (W - ml - mr), y = logScale(lo, hi, H - mb, mt);
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="fit">`;
   niceLogTicks(lo, hi).forEach(v => s += `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}" stroke="${C.grid}"/>` + T(ml - 8, y(v) + 5, kr(v), {a: 'end'}));
   s += `<line x1="${ml}" x2="${W - mr}" y1="${y(START)}" y2="${y(START)}" stroke="${C.base}" stroke-width="1.5" stroke-dasharray="6 5"/>`;
   for (let i = 0; i <= n; i += 10) s += T(x(i), H - mb + 22, i, {a: 'middle'});
@@ -591,40 +611,77 @@ function simChart(groups, path, k, n) {
 }
 
 function distChart(shares, commits, n, linear) {
-  const W = 1100, H = 420, ml = 70, mr = 30, mt = 56, mb = 50;
-  const dash = ['', '9 6', '3 5'], cols = shares.length === 2 ? [C.accent, C.orange] : [C.grey, C.accent, C.orange];
-  const par = s => { const f = s / 100; return {mu: Math.log(START) + n / 2 * Math.log((1 + f) * (1 - f / 2)), sg: Math.sqrt(n / 4) * Math.log((1 + f) / (1 - f / 2)), mean: START * Math.pow(1 + 0.25 * f, n)}; };
-  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
-  // legend
-  shares.forEach((sh, i) => { const lx = ml + i * 240; s += `<line x1="${lx}" x2="${lx + 30}" y1="14" y2="14" stroke="${cols[i]}" stroke-width="3" stroke-dasharray="${dash[i]}"/>` + T(lx + 38, 19, sh + '% in the fund', {c: C.ink, fs: 16}) + T(lx + 38, 36, 'median ' + kr(finalW(sh, n, n / 2)), {c: cols[i], fs: 13}); });
-  s += `<rect x="${ml + shares.length * 240 + 4}" y="8" width="11" height="11" fill="none" stroke="${C.sub}" stroke-width="2" transform="rotate(45 ${ml + shares.length * 240 + 9.5} 13.5)"/>` + T(ml + shares.length * 240 + 24, 19, 'average', {c: C.sub, fs: 16});
+  const W = 1100, H = 450, ml = 70, mr = 40, mt = 78, mb = 84, base = H - mb, rowY = base + 20;
+  const dash = ['', '9 6', '3 5'], cols = shares.length === 2 ? [C.accent, C.orange] : shares.length === 1 ? [C.accent] : [C.grey, C.accent, C.orange];
+  const par = s => { const f = s / 100; return {mu: Math.log(START) + n / 2 * Math.log((1 + f) * (1 - f / 2)), sg: Math.sqrt(n / 4) * Math.log((1 + f) / (1 - f / 2)), mean: START * Math.pow(1 + 0.25 * f, n), med: finalW(s, n, n / 2)}; };
+  const ps = shares.map(par);
+  const dia = (x, y, c, r = 6) => `<rect x="${x - r}" y="${y - r}" width="${2 * r}" height="${2 * r}" fill="#fff" stroke="${c}" stroke-width="2.4" transform="rotate(45 ${x} ${y})"/>`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="fit">`;
+  // legend: name, then circle + median, then diamond + average
+  shares.forEach((sh, i) => {
+    const lx = ml + 10 + i * 300;
+    s += `<line x1="${lx}" x2="${lx + 34}" y1="14" y2="14" stroke="${cols[i]}" stroke-width="3.5" stroke-dasharray="${dash[i]}"/>` + T(lx + 44, 20, sh + '% in the fund', {c: C.ink, fs: 18, w: 500});
+    s += `<circle cx="${lx + 52}" cy="41" r="6" fill="${cols[i]}"/>` + T(lx + 66, 46, 'median ' + kr(ps[i].med), {c: cols[i], fs: 15});
+    s += dia(lx + 52, 62, cols[i], 5.5) + T(lx + 66, 67, 'average ' + kr(ps[i].mean), {c: cols[i], fs: 15});
+  });
+  let X;
   if (!linear) {
-    const lo = -3, hi = 9, X = e => ml + (e - lo) / (hi - lo) * (W - ml - mr);
-    const ps = shares.map(par), peaks = ps.map(p => p.sg > 0 ? 1 / (p.sg / Math.LN10 * Math.sqrt(2 * Math.PI)) : 0);
-    const ymax = Math.max(0.3, ...peaks) * 1.15, Y = v => H - mb - v / ymax * (H - mt - mb);
-    [-2, 0, 2, 3, 4, 6, 8].forEach(e => s += `<line x1="${X(e)}" x2="${X(e)}" y1="${mt}" y2="${H - mb}" stroke="${C.grid}"/>` + T(X(e), H - mb + 22, kr(Math.pow(10, e)), {a: 'middle'}));
-    s += `<line x1="${X(3)}" x2="${X(3)}" y1="${mt}" y2="${H - mb}" stroke="${C.base}" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+    const lo = -3, hi = 9; X = v => ml + (Math.log10(Math.max(v, 1e-9)) - lo) / (hi - lo) * (W - ml - mr);
+    const peaks = ps.map(p => p.sg > 0 ? 1 / (p.sg / Math.LN10 * Math.sqrt(2 * Math.PI)) : 0);
+    const ymax = Math.max(0.3, ...peaks) * 1.1, Y = v => base - v / ymax * (base - mt - 10);
+    [-2, 0, 2, 3, 4, 6, 8].forEach(e => s += `<line x1="${X(10 ** e)}" x2="${X(10 ** e)}" y1="${mt}" y2="${base}" stroke="${C.grid}"/>` + T(X(10 ** e), rowY + 30, kr(10 ** e), {a: 'middle'}));
+    s += `<line x1="${X(1000)}" x2="${X(1000)}" y1="${mt}" y2="${base}" stroke="${C.base}" stroke-width="1.5" stroke-dasharray="5 4"/>`;
     s += T((ml + W - mr) / 2, H - 6, 'Wealth after ' + n + ' rounds (kr, log scale)', {a: 'middle', c: C.sub});
     ps.forEach((p, i) => {
-      if (!(p.sg > 0)) { s += `<line x1="${X(3)}" x2="${X(3)}" y1="${mt}" y2="${H - mb}" stroke="${cols[i]}" stroke-width="4" stroke-dasharray="${dash[i]}"/>` + T(X(3) + 8, mt + 14, '0%: always 1000', {c: cols[i], fs: 14}); return; }
+      if (!(p.sg > 0)) { s += `<line x1="${X(1000)}" x2="${X(1000)}" y1="${mt}" y2="${base}" stroke="${cols[i]}" stroke-width="4"/>`; return; }
       const m = p.mu / Math.LN10, sd = p.sg / Math.LN10, pts = [];
-      for (let e = lo; e <= hi + 1e-9; e += 0.03) pts.push(X(e) + ',' + Y(Math.exp(-((e - m) ** 2) / (2 * sd * sd)) / (sd * Math.sqrt(2 * Math.PI))));
+      for (let e = lo; e <= hi + 1e-9; e += 0.03) pts.push(X(10 ** e) + ',' + Y(Math.exp(-((e - m) ** 2) / (2 * sd * sd)) / (sd * Math.sqrt(2 * Math.PI))));
       s += `<polyline fill="none" stroke="${cols[i]}" stroke-width="3" stroke-dasharray="${dash[i]}" stroke-linejoin="round" points="${pts.join(' ')}"/>`;
-      const xm = X(Math.min(hi, Math.log10(p.mean)));
-      s += `<rect x="${xm - 6}" y="${H - mb - 20 - i * 16}" width="12" height="12" fill="#fff" stroke="${cols[i]}" stroke-width="2.5" transform="rotate(45 ${xm} ${H - mb - 14 - i * 16})"/>`;
     });
   } else {
-    const max = 150000, X = v => ml + v / max * (W - ml - mr), ymax = 0.12, Y = v => H - mb - Math.min(v, ymax) / ymax * (H - mt - mb);
-    [0, 25000, 50000, 75000, 100000, 125000, 150000].forEach(v => s += `<line x1="${X(v)}" x2="${X(v)}" y1="${mt}" y2="${H - mb}" stroke="${C.grid}"/>` + T(X(v), H - mb + 22, v ? kr(v) : '0', {a: 'middle'}));
-    s += T((ml + W - mr) / 2, H - 6, 'Wealth after ' + n + ' rounds (kr). Curves are cut at the top.', {a: 'middle', c: C.sub});
-    shares.map(par).forEach((p, i) => {
-      if (!(p.sg > 0)) { s += `<line x1="${X(1000)}" x2="${X(1000)}" y1="${mt}" y2="${H - mb}" stroke="${cols[i]}" stroke-width="4"/>`; return; }
+    const max = 150000, ymax = 0.12, Y = v => base - Math.min(v, ymax) / ymax * (base - mt - 10);
+    X = v => ml + Math.min(v, max) / max * (W - ml - mr);
+    [0, 25000, 50000, 75000, 100000, 125000, 150000].forEach(v => s += `<line x1="${X(v)}" x2="${X(v)}" y1="${mt}" y2="${base}" stroke="${C.grid}"/>` + T(X(v), rowY + 30, v ? kr(v) : '0', {a: 'middle'}));
+    s += T((ml + W - mr) / 2, H - 6, 'Wealth after ' + n + ' rounds (kr). Curves are cut at the top. Symbols at the right edge are further out.', {a: 'middle', c: C.sub});
+    ps.forEach((p, i) => {
+      if (!(p.sg > 0)) { s += `<line x1="${X(1000)}" x2="${X(1000)}" y1="${mt}" y2="${base}" stroke="${cols[i]}" stroke-width="4"/>`; return; }
       const pts = []; for (let v = 40; v <= max; v += v < 4000 ? 40 : 400) pts.push(X(v) + ',' + Y(1000 * Math.exp(-((Math.log(v) - p.mu) ** 2) / (2 * p.sg * p.sg)) / (v * p.sg * Math.sqrt(2 * Math.PI))));
       s += `<polyline fill="none" stroke="${cols[i]}" stroke-width="3" stroke-dasharray="${dash[i]}" points="${pts.join(' ')}"/>`;
-      if (p.mean < max) { const xm = X(p.mean); s += `<rect x="${xm - 6}" y="${H - mb - 20 - i * 16}" width="12" height="12" fill="#fff" stroke="${cols[i]}" stroke-width="2.5" transform="rotate(45 ${xm} ${H - mb - 14 - i * 16})"/>`; }
-      else s += T(W - mr, mt + 40 + i * 20, 'average ' + kr(p.mean) + ' →', {a: 'end', c: cols[i], fs: 15});
     });
   }
+  s += `<line x1="${ml}" x2="${W - mr}" y1="${base}" y2="${base}" stroke="${C.base}"/>`;
+  s += `<rect x="${ml}" y="${rowY - 11}" width="${W - ml - mr}" height="22" rx="5" fill="#f1efe8"/>`;
+  ps.forEach((p, i) => s += `<circle cx="${X(p.med)}" cy="${rowY}" r="7" fill="${cols[i]}"/>`);
+  ps.forEach((p, i) => s += dia(X(p.mean), rowY, cols[i]));
+  return s + '</svg>';
+}
+
+function mmChart(commits, n, axis) {
+  const W = 1100, H = 520, ml = 100, mr = 160, mt = 40, mb = 64, base = H - mb;
+  const med = f => START * Math.pow((1 + f) * (1 - f / 2), n / 2), avg = f => START * Math.pow(1 + 0.25 * f, n);
+  const X = f => ml + f * (W - ml - mr);
+  let Y, ticks, ymax;
+  if (axis === 'log') { const lo = Math.log(500), hi = Math.log(avg(1) * 2.5); Y = v => base - (Math.log(v) - lo) / (hi - lo) * (base - mt); ticks = [1000, 1e4, 1e5, 1e6, 1e7, 1e8].filter(v => Math.log(v) < hi); }
+  else { ymax = axis === 'full' ? Math.ceil(avg(1) / 2e6) * 2e6 : 150000; Y = v => base - Math.min(v, ymax * 1.03) / ymax * (base - mt); ticks = axis === 'full' ? [0, 2e6, 4e6, 6e6, 8e6].filter(v => v <= ymax) : [0, 25000, 50000, 75000, 100000, 125000, 150000]; }
+  let s = `<svg viewBox="0 0 ${W} ${H}" class="fit">`;
+  ticks.forEach(v => s += `<line x1="${ml}" x2="${W - mr}" y1="${Y(v)}" y2="${Y(v)}" stroke="${C.grid}"/>` + T(ml - 10, Y(v) + 5, v ? kr(v) : '0', {a: 'end'}));
+  if (axis === 'log') s += `<line x1="${ml}" x2="${W - mr}" y1="${Y(1000)}" y2="${Y(1000)}" stroke="${C.base}" stroke-width="1.5" stroke-dasharray="6 5"/>`;
+  for (let i = 0; i <= 10; i++) s += T(X(i / 10), base + 24, i * 10 + '%', {a: 'middle'});
+  s += T((ml + W - mr) / 2, H - 6, 'Fixed share in the fund', {a: 'middle', c: C.sub});
+  s += T(ml - 10, 22, 'Wealth after ' + n + ' rounds (kr' + (axis === 'log' ? ', log scale)' : ')'), {c: C.sub});
+  const fs = [...Array(201)].map((_, i) => i / 200);
+  const av = fs.filter(f => axis === 'log' || avg(f) <= ymax * 1.03);
+  s += `<polyline fill="none" stroke="${C.orange}" stroke-width="3" stroke-dasharray="9 6" points="${av.map(f => X(f) + ',' + Y(avg(f))).join(' ')}"/>`;
+  s += `<polyline fill="none" stroke="${C.accent}" stroke-width="3.5" points="${fs.map(f => X(f) + ',' + Y(med(f))).join(' ')}"/>`;
+  const la = av[av.length - 1];
+  if (la < 1) s += T(X(la) + 8, Y(avg(la)) + 16, 'average → ' + kr(avg(1)) + ' at 100%', {c: C.orange, fs: 16});
+  else s += T(X(1) + 10, Y(avg(1)) + 5, 'average', {c: C.orange, fs: 17}) + T(X(1) + 10, Y(avg(1)) + 25, kr(avg(1)), {c: C.orange, fs: 15});
+  s += T(X(1) + 10, Y(med(1)) + 5 - (axis === 'full' ? 18 : 0), 'median', {c: C.accent, fs: 17}) + (axis === 'full' ? '' : T(X(1) + 10, Y(med(1)) + 25, kr(med(1)), {c: C.accent, fs: 15}));
+  s += `<circle cx="${X(0.5)}" cy="${Y(med(0.5))}" r="7" fill="${C.accent}" stroke="#fff" stroke-width="2.5"/>`;
+  if (axis !== 'full') s += T(X(0.5), Y(med(0.5)) - 16, 'highest median: ' + kr(med(0.5)) + ' at 50%', {a: 'middle', c: C.accent, fs: 16});
+  // class choices along the x-axis
+  const cnt = {}; commits.forEach(v => cnt[v] = (cnt[v] || 0) + 1);
+  Object.entries(cnt).forEach(([v, k]) => { for (let j = 0; j < k; j++) s += `<circle cx="${X(+v / 100)}" cy="${base - 8 - j * 11}" r="4.5" fill="${shareCol(+v)}" stroke="#fff" stroke-width="1"/>`; });
   return s + '</svg>';
 }
 
