@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Investment game</title>
+<style>
+:root{--ink:#1f1e1c;--sub:#5f5e5a;--muted:#8a8880;--line:#e4e2db;--bg:#faf9f6;--card:#fff;--accent:#2a78d6;--gain:#13945f;--loss:#d23f3e;--grey:#8a8880;--r:10px}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button{font:inherit;cursor:pointer;border:1px solid #cfcdc5;background:#fff;color:var(--ink);border-radius:var(--r);padding:10px 14px}
+button:hover{background:#f2f1ec}
+button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+button.primary:hover{background:#3a3936}
+input{font:inherit;padding:10px 12px;border:1px solid #cfcdc5;border-radius:var(--r);width:100%}
+.muted{color:var(--muted)}.sub{color:var(--sub)}
+.err{color:var(--loss);font-size:14px;min-height:20px;margin-top:6px}
+/* student */
+.stu{max-width:460px;margin:0 auto;padding:18px 16px 40px}
+.stu h1{font-size:20px;font-weight:600;margin:0 0 2px}
+.stu .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;color:var(--sub);font-size:14px}
+.big{font-size:40px;font-weight:600;letter-spacing:-.5px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0}
+.grid11{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+.grid11 button{padding:14px 0;font-size:17px}
+.grid11 button.sel{background:var(--accent);border-color:var(--accent);color:#fff}
+.split{display:flex;height:34px;border-radius:8px;overflow:hidden;margin:10px 0 4px;background:#eceae4}
+.split .f{background:var(--accent)}
+.legend{display:flex;justify-content:space-between;font-size:14px;color:var(--sub)}
+.wide{width:100%;padding:14px;font-size:18px}
+.outc{font-size:26px;font-weight:600}
+.gain{color:var(--gain)}.loss{color:var(--loss)}
+.spin{display:inline-block;width:46px;height:46px;border-radius:50%;background:#e9c46a;border:3px solid #c9a227;animation:sp .6s linear infinite;vertical-align:middle;margin-right:10px}
+@keyframes sp{0%{transform:rotateY(0)}100%{transform:rotateY(360deg)}}
+.saved{font-size:14px;color:var(--gain)}
+/* board */
+.brd{padding:14px 22px 22px;min-height:100vh}
+.ctl{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.ctl input{width:90px;padding:8px}
+.ctl button{padding:8px 12px;font-size:15px}
+.ctl .sp{flex:1}
+.ctl label{font-size:14px;color:var(--sub);display:flex;gap:6px;align-items:center}
+.ctl label input{width:auto}
+.hideCtl{position:fixed;right:10px;bottom:10px;font-size:13px;padding:6px 10px;opacity:.6;z-index:9}
+.head{display:flex;align-items:baseline;gap:18px;margin:4px 0 12px}
+.head h2{font-size:28px;margin:0;font-weight:600}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:12px}
+.metric{background:#efede7;border-radius:12px;padding:12px 14px}
+.metric .l{font-size:15px;color:var(--sub)}.metric .v{font-size:30px;font-weight:600}.metric .s{font-size:13px;color:var(--muted)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.three{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr) minmax(0,1fr);gap:16px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px}
+.panel .cap{font-size:15px;color:var(--sub);margin:0 0 6px}
+.huge{font-size:88px;font-weight:600;text-align:center;margin:40px 0 0}
+.center{text-align:center}
+.banner{font-size:34px;font-weight:600;margin:0 0 10px}
+.lb{width:100%;border-collapse:collapse;font-size:18px}
+.lb td{padding:5px 4px;border-bottom:1px solid var(--line)}
+.lb td.r{text-align:right;font-variant-numeric:tabular-nums}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:16px}
+.chip{background:#efede7;border-radius:20px;padding:6px 12px;font-size:18px}
+.stage{position:relative}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(250,249,246,.82);z-index:5;perspective:900px;min-height:420px}
+.coin{width:230px;height:230px;position:relative;transform-style:preserve-3d}
+.face{position:absolute;inset:0;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;backface-visibility:hidden;font-size:54px;font-weight:700;border:10px solid}
+.face small{font-size:20px;font-weight:500;margin-top:4px}
+.face.h{background:#e3f4ec;border-color:#13945f;color:#0b6b44}
+.face.t{background:#fbe9e8;border-color:#d23f3e;color:#9b2423;transform:rotateY(180deg)}
+.tbl{border-collapse:collapse;font-size:18px;width:100%}
+.tbl th,.tbl td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right}
+.tbl th{font-weight:500;color:var(--sub);font-size:15px}
+.tbl td:first-child,.tbl th:first-child{text-align:left}
+.seg{display:inline-flex;border:1px solid #cfcdc5;border-radius:var(--r);overflow:hidden}
+.seg button{border:0;border-radius:0;padding:7px 12px;font-size:14px}
+.seg button.on{background:var(--ink);color:#fff}
+svg text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+/* ===== settings ===== */
+const API_URL = 'https://script.google.com/macros/s/AKfycbxuKivE-EJyznxSx4qe549yZ0AHgGcazN2srtS73Jo1WZEzVmDnZ29dfrejg4zd5fUl/exec';
+const QS = new URLSearchParams(location.search);
+const API = QS.get('api') || API_URL;
+const G = (QS.get('g') || 'default').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'default';
+const BOARD = location.hash === '#board';
+const START = 1000;
+const C = {ink:'#1f1e1c',sub:'#5f5e5a',muted:'#8a8880',grid:'#e7e5de',base:'#c9c7bf',grey:'#8a8880',accent:'#2a78d6',gain:'#13945f',loss:'#d23f3e',orange:'#eb6834'};
+
+/* ===== helpers ===== */
+let off = 0, data = null, lastV = null;
+const nowS = () => Date.now() + off;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const kr = v => {
+  if (!isFinite(v)) return '–';
+  const a = Math.abs(v);
+  if (a >= 1e9) return (v / 1e9).toLocaleString('en-US', {maximumFractionDigits: 1}) + ' billion';
+  if (a >= 1e6) return (v / 1e6).toLocaleString('en-US', {maximumFractionDigits: 1}) + ' million';
+  if (a >= 1) return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return v.toLocaleString('en-US', {maximumSignificantDigits: 1});
+};
+const pct = p => p <= 0 ? '0%' : p < 0.001 ? '<0.1%' : p < 0.01 ? (p * 100).toFixed(1) + '%' : p > 0.999 && p < 1 ? '>99.9%' : Math.round(p * 100) + '%';
+const median = a => { const b = a.slice().sort((x, y) => x - y), n = b.length; return n ? (n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2) : NaN; };
+const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+const step = (w, s, o) => w * (o === 'H' ? 1 + s / 100 : 1 - s / 200);
+const shareCol = s => { const a = [181, 212, 244], b = [12, 68, 124], f = s / 100; return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * f)).join(',')})`; };
+const hash = (s, i) => { let h = 2166136261 ^ i; for (const ch of String(s)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return ((h >>> 0) % 1000) / 1000; };
+
+async function api(params) {
+  if (API.indexOf('PASTE_') === 0) throw new Error('The server address is not set in index.html');
+  const r = await fetch(API + '?' + new URLSearchParams(Object.assign({g: G}, params)), {cache: 'no-store'});
+  const j = await r.json();
+  if (j.now) off = j.now - Date.now();
+  return j;
+}
+
+/* ===== maths for the distributions (40 rounds) ===== */
+const lnC = (() => { const a = [0]; for (let i = 1; i <= 400; i++) a.push(a[i - 1] + Math.log(i)); return a; })();
+const binP = (n, k) => Math.exp(lnC[n] - lnC[k] - lnC[n - k] - n * Math.LN2);
+const finalW = (s, n, k) => START * Math.pow(1 + s / 100, k) * Math.pow(1 - s / 200, n - k);
+function stats(s, n, refMedian) {
+  const mu = START * Math.pow(1 + 0.25 * s / 100, n);
+  let below = 0, reach = 0, beat = 0;
+  for (let k = 0; k <= n; k++) {
+    const w = finalW(s, n, k), p = binP(n, k);
+    if (w < START - 1e-9) below += p;
+    if (w >= mu * (1 - 1e-12)) reach += p;
+    if (w > refMedian * (1 + 1e-12)) beat += p;
+  }
+  let cum = 0, med = 0;
+  for (let k = 0; k <= n; k++) { cum += binP(n, k); if (cum >= 0.5) { med = finalW(s, n, k); break; } }
+  return {mean: mu, median: med, below, reach, beat};
+}
+
+/* ===== small SVG kit ===== */
+function logScale(lo, hi, a, b) { const L = Math.log(lo), H = Math.log(hi); return v => a + (Math.log(Math.max(v, 1e-12)) - L) / (H - L) * (b - a); }
+function niceLogTicks(lo, hi) {
+  const t = []; for (let e = Math.floor(Math.log10(lo)) - 1; e <= Math.ceil(Math.log10(hi)) + 1; e++) [1, 2, 5].forEach(m => { const v = m * Math.pow(10, e); if (v >= lo && v <= hi) t.push(v); });
+  if (t.length > 7) return t.filter(v => /^1/.test(String(v)) || v === 1000);
+  return t;
+}
+const T = (x, y, s, o = {}) => `<text x="${x}" y="${y}" font-size="${o.fs || 15}" fill="${o.c || C.muted}" text-anchor="${o.a || 'start'}"${o.w ? ` font-weight="${o.w}"` : ''}>${s}</text>`;
+
+/* =================================================================== */
+/* ============================ STUDENT ============================== */
+/* =================================================================== */
+const LS = 'ig_' + G;
+let me = JSON.parse(localStorage.getItem(LS) || 'null');
+let pick = null, pickKey = '', saved = '', stuErr = '', busy = false;
+
+function token() { const a = 'abcdefghijkmnpqrstuvwxyz23456789'; let s = ''; const r = crypto.getRandomValues(new Uint8Array(16)); r.forEach(x => s += a[x % a.length]); return s; }
+
+async function stuPoll(force) {
+  try {
+    const p = {a: 'state'};
+    if (me) { p.name = me.name; p.t = me.t; }
+    if (!force && lastV) p.v = lastV;
+    const j = await api(p);
+    if (!j.ok) throw new Error(j.error);
+    if (!j.same) { data = j; lastV = j.v; if (me && j.session && me.session && j.session !== me.session) { me.session = null; } stuRender(); }
+    else stuTick();
+  } catch (e) { stuErr = e.message; stuRender(); }
+}
+
+function stuTick() { // re-render when a reveal moment passes
+  if (!data) return;
+  const k = stuKey(); if (k !== stuTick.k) stuRender();
+}
+function stuKey() {
+  if (!data) return '';
+  const flipping = data.phase === 'round_closed' && nowS() < data.revealAt;
+  const simEnd = data.simStart + data.simRounds * data.simStepMs + 500;
+  const simming = data.phase === 'sim' && nowS() < simEnd;
+  return [data.v, flipping, simming].join('|');
+}
+
+function stuRender() {
+  const app = $('#app');
+  stuTick.k = stuKey();
+  const d = data;
+  let h = `<div class="stu"><div class="top"><span>Investment game</span><span>${me && d && d.me ? esc(d.me.name) : ''}</span></div>`;
+  if (!d) { app.innerHTML = h + `<p class="muted">Connecting…</p><div class="err">${esc(stuErr)}</div></div>`; return; }
+  if (d.phase === 'none') { app.innerHTML = h + `<p>Waiting for the teacher to start the game.</p><div class="err">${esc(stuErr)}</div></div>`; return; }
+  const joined = me && d.me && me.session === d.session;
+  if (!joined) {
+    h += `<h1>Join the game</h1><p class="sub">Use the same name as in the risk survey.</p>
+      <input id="nm" maxlength="24" placeholder="Your name" value="${esc(me && me.name || '')}" autocomplete="off">
+      <div class="err" id="jerr">${esc(stuErr)}</div>
+      <button class="primary wide" id="jb">Join</button></div>`;
+    app.innerHTML = h;
+    $('#jb').onclick = stuJoin; $('#nm').onkeydown = e => { if (e.key === 'Enter') stuJoin(); };
+    return;
+  }
+  const m = d.me, r = d.round;
+  const wNow = () => { for (let i = r; i >= 0; i--) if (m.w[i] != null) return m.w[i]; return START; };
+  const rankLine = () => m.rank ? `<p class="sub">You are number <b>${m.rank}</b> of ${m.n}.</p>` : '';
+  if (d.phase === 'lobby') {
+    h += `<h1>You're in</h1><p class="sub">You start with ${kr(START)} kr. Each round you choose how much to put in the fund. The rest stays in a bank account at 0%.</p>
+      <div class="card"><b>The fund</b><br>Heads: +100%<br>Tails: −50%<br><span class="muted">on the amount you invest</span></div><p class="muted">Waiting for round 1…</p>`;
+  } else if (d.phase === 'round_open') {
+    if (m.j === null || m.j > r - 1) {
+      h += `<h1>Round ${r} of ${d.rounds}</h1><p class="sub">You join from the next round.</p>`;
+    } else {
+      const w = m.w[r - 1], key = d.session + ':' + r;
+      if (pickKey !== key) { pickKey = key; pick = m.pend; saved = m.pend != null ? 'ok' : ''; }
+      const s = pick == null ? null : pick;
+      h += `<h1>Round ${r} of ${d.rounds}</h1><div class="muted">Your wealth</div><div class="big">${kr(w)} kr</div>
+        <div class="card"><b>How much of your wealth goes into the fund?</b>
+        <div class="grid11">${[0,10,20,30,40,50,60,70,80,90,100].map(v => `<button data-s="${v}" class="${s === v ? 'sel' : ''}">${v}%</button>`).join('')}</div>
+        <div class="split"><div class="f" style="width:${s || 0}%"></div></div>
+        <div class="legend"><span>Fund: ${s == null ? '–' : kr(w * s / 100) + ' kr'}</span><span>Bank: ${s == null ? '–' : kr(w * (100 - s) / 100) + ' kr'}</span></div></div>
+        <button class="primary wide" id="sb">${saved === 'ok' && m.pend === s ? 'Submitted ✓ (tap a share to change)' : 'Submit'}</button>
+        <div class="err">${esc(stuErr)}</div>
+        <p class="muted" style="font-size:14px">You can change your choice until the coin is flipped. If you don't submit, your share from the last round is used.</p>`;
+    }
+  } else if (d.phase === 'round_closed') {
+    const flipping = nowS() < d.revealAt;
+    if (flipping) h += `<h1>Round ${r} of ${d.rounds}</h1><p class="outc"><span class="spin"></span>The coin is in the air…</p>`;
+    else if (m.w[r] == null) h += `<h1>Round ${r} of ${d.rounds}</h1><p class="sub">You join from the next round.</p>`;
+    else {
+      const o = d.outcomes[r - 1], s = m.sh[r], b = m.w[r - 1], a = m.w[r];
+      h += `<h1>Round ${r} of ${d.rounds}</h1><p class="outc ${o === 'H' ? 'gain' : 'loss'}">${o === 'H' ? 'Heads: fund +100%' : 'Tails: fund −50%'}</p>
+        <div class="card"><div class="muted">You had ${s}% in the fund${m.sub[r] ? '' : ' (not submitted, last share used)'}</div>
+        <div class="big">${kr(a)} kr</div><div class="${a >= b ? 'gain' : 'loss'}">${a >= b ? '+' : '−'}${kr(Math.abs(a - b))} kr</div>
+        ${miniPath(m)}</div>${rankLine()}<p class="muted">${r < d.rounds ? 'Next round soon…' : 'That was the last round.'}</p>`;
+    }
+  } else if (d.phase === 'results') {
+    h += `<h1>Final result</h1><div class="muted">Your wealth after ${d.rounds} rounds</div><div class="big">${kr(wNow())} kr</div>
+      <div class="card">${miniPath(m)}</div>${rankLine()}<p class="muted">Look at the board.</p>`;
+  } else if (d.phase === 'commit_open') {
+    const key = d.session + ':c' + d.commitNo;
+    if (pickKey !== key) { pickKey = key; pick = m.commit; saved = m.commit != null ? 'ok' : ''; }
+    const s = pick;
+    h += `<h1>New game: one fixed share</h1><p class="sub">You start again with ${kr(START)} kr. Choose one share for the fund. <b>This share will be used in every round</b>, ${d.simRounds} rounds in total. Watch the board.</p>
+      <div class="card"><div class="grid11">${[0,10,20,30,40,50,60,70,80,90,100].map(v => `<button data-s="${v}" class="${s === v ? 'sel' : ''}">${v}%</button>`).join('')}</div>
+      <div class="split"><div class="f" style="width:${s || 0}%"></div></div></div>
+      <button class="primary wide" id="sb">${saved === 'ok' && m.commit === s ? 'Locked in ✓ (tap a share to change)' : 'Lock in my share'}</button><div class="err">${esc(stuErr)}</div>`;
+  } else if (d.phase === 'commit_closed' || (d.phase === 'sim' && nowS() < d.simStart + d.simRounds * d.simStepMs + 500)) {
+    h += `<h1>Watch the board</h1><p class="sub">${m.commit != null ? `Your share is locked at <b>${m.commit}%</b>.` : 'You did not choose a share this time.'}</p>`;
+  } else if (d.phase === 'sim' || d.phase === 'dist') {
+    const seqShares = m.sh.filter((x, i) => i > 0 && x != null);
+    h += `<h1>Fixed share: result</h1>`;
+    if (m.commit != null && m.simW != null) h += `<div class="muted">Your wealth after ${d.simRounds} rounds with ${m.commit}% in the fund</div><div class="big">${kr(m.simW)} kr</div><p class="sub">You are number <b>${m.simRank}</b> of ${m.simN}.</p>`;
+    else h += `<p class="sub">You did not choose a share this time.</p>`;
+    h += `<div class="card"><div class="muted">Your choices</div>${seqShares.length ? `Average share in the round-by-round game: <b>${Math.round(mean(seqShares))}%</b><br>` : ''}${m.commit != null ? `Fixed share: <b>${m.commit}%</b>` : ''}</div>`;
+  }
+  h += `</div>`;
+  app.innerHTML = h;
+  document.querySelectorAll('.grid11 button').forEach(b => b.onclick = () => { pick = Number(b.dataset.s); saved = ''; stuRender(); });
+  const sb = $('#sb'); if (sb) sb.onclick = stuSubmit;
+  if (d.phase === 'round_closed' && nowS() < d.revealAt) setTimeout(stuRender, d.revealAt - nowS() + 50);
+  if (d.phase === 'sim') { const t = d.simStart + d.simRounds * d.simStepMs + 550 - nowS(); if (t > 0) setTimeout(stuRender, t); }
+}
+
+function miniPath(m) {
+  const pts = m.w.map((v, i) => [i, v]).filter(p => p[1] != null);
+  if (pts.length < 2) return '';
+  const W = 400, H = 120, lo = Math.min(START, ...pts.map(p => p[1])) * 0.8, hi = Math.max(START, ...pts.map(p => p[1])) * 1.25;
+  const x = i => 30 + i / data.rounds * (W - 40), y = logScale(lo, hi, H - 16, 8);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="margin-top:10px">`;
+  s += `<line x1="30" x2="${W - 10}" y1="${y(START)}" y2="${y(START)}" stroke="${C.base}" stroke-dasharray="4 4"/>` + T(26, y(START) + 4, '1000', {a: 'end', fs: 11});
+  for (let i = 0; i <= data.rounds; i++) s += T(x(i), H - 2, i, {a: 'middle', fs: 11});
+  s += `<polyline fill="none" stroke="${C.accent}" stroke-width="2.5" points="${pts.map(p => x(p[0]) + ',' + y(p[1])).join(' ')}"/>`;
+  pts.forEach(p => s += `<circle cx="${x(p[0])}" cy="${y(p[1])}" r="3.5" fill="${C.accent}"/>`);
+  return s + '</svg>';
+}
+
+async function stuJoin() {
+  if (busy) return;
+  const name = ($('#nm').value || '').trim();
+  if (!name) { stuErr = 'Enter a name first.'; stuRender(); return; }
+  busy = true;
+  const t = me && me.name && me.name.toLowerCase() === name.toLowerCase() && me.t ? me.t : token();
+  try {
+    const j = await api({a: 'join', name, t, s: data.session});
+    if (!j.ok) { stuErr = j.error; if (j.stale) lastV = null; }
+    else { me = {name, t, session: j.session}; localStorage.setItem(LS, JSON.stringify(me)); stuErr = ''; data = j; lastV = null; await stuPoll(true); }
+  } catch (e) { stuErr = 'No connection. Try again.'; }
+  busy = false; stuRender();
+}
+
+async function stuSubmit() {
+  if (pick == null) { stuErr = 'Choose a share first.'; stuRender(); return; }
+  if (busy) return; busy = true;
+  try {
+    const j = await api({a: 'submit', name: me.name, t: me.t, s: data.session, share: pick});
+    if (!j.ok) stuErr = j.error; else { stuErr = ''; saved = 'ok'; data = j; lastV = j.v; }
+  } catch (e) { stuErr = 'Not saved. Check the connection and try again.'; }
+  busy = false; stuRender();
+}
+
+/* =================================================================== */
+/* ============================= BOARD =============================== */
+/* =================================================================== */
+let pin = localStorage.getItem('ig_pin') || '', showCtl = true, showLB = localStorage.getItem('ig_lb') !== '0';
+let distSet = 'preset', distLinear = false, msg = '', coinShown = -1, simRAF = 0, renderedKey = '';
+
+async function brdPoll(force) {
+  try {
+    const p = {a: 'state', role: 'board'};
+    if (!force && lastV) p.v = lastV;
+    const j = await api(p);
+    if (!j.ok) throw new Error(j.error);
+    if (!j.same) { data = j; lastV = j.v; brdRender(); }
+  } catch (e) { msg = e.message; brdCtl(); }
+}
+
+async function teach(a, extra) {
+  if (a === 'new' && !confirm('Start a new session? Students must join again.')) return;
+  try {
+    const j = await api(Object.assign({a, pin, role: 'board'}, extra || {}));
+    if (!j.ok) { msg = j.error; brdCtl(); return; }
+    msg = ''; data = j; lastV = j.v; brdRender();
+  } catch (e) { msg = 'No connection to the server.'; brdCtl(); }
+}
+
+function primaryAction() {
+  const d = data; if (!d || d.phase === 'none') return ['new', 'New session'];
+  switch (d.phase) {
+    case 'lobby': return ['open', 'Start round 1'];
+    case 'round_open': return ['flip', 'Flip coin'];
+    case 'round_closed': return d.round < d.rounds ? ['open', `Open round ${d.round + 1}`] : ['results', 'Show results'];
+    case 'results': return ['commit', 'Open fixed-share game'];
+    case 'commit_open': return ['close', 'Lock shares'];
+    case 'commit_closed': return ['play', 'Play'];
+    case 'sim': return ['dist', 'Show distributions'];
+    case 'dist': return ['commit', 'New fixed-share round'];
+  }
+  return null;
+}
+
+function brdCtl() {
+  let el = $('#ctl');
+  if (!el) return;
+  if (!showCtl) { el.innerHTML = ''; el.style.display = 'none'; $('#ctlbtn').style.display = 'block'; return; }
+  el.style.display = 'flex'; $('#ctlbtn').style.display = 'none';
+  const d = data || {}, pa = primaryAction();
+  let h = `<input id="pin" type="password" placeholder="PIN" value="${esc(pin)}">`;
+  if (pa) h += `<button class="primary" data-a="${pa[0]}">${pa[1]}</button>`;
+  if (d.phase === 'round_open') h += `<span class="muted" style="font-size:14px">Manual:</span><button data-a="flip" data-o="H">Heads</button><button data-a="flip" data-o="T">Tails</button>`;
+  if (d.phase === 'round_closed' && d.round < d.rounds) h += `<button data-a="results">End early: show results</button>`;
+  if (d.phase === 'sim' || d.phase === 'dist') h += `<button data-a="play">Replay</button>`;
+  if (d.phase === 'dist') h += `<button data-a="dist-back" data-local="1">Back to simulation</button>`;
+  h += `<label><input type="checkbox" id="lbx" ${showLB ? 'checked' : ''}> Leaderboard</label>`;
+  h += `<span class="sp"></span><span class="err" style="margin:0">${esc(msg)}</span>`;
+  h += `<button id="csv">Export CSV</button><button data-a="new">New session</button><button id="hide">Hide controls</button>`;
+  el.innerHTML = h;
+  $('#pin').oninput = e => { pin = e.target.value; localStorage.setItem('ig_pin', pin); };
+  el.querySelectorAll('button[data-a]').forEach(b => b.onclick = () => {
+    if (b.dataset.a === 'dist-back') { data.phase = 'sim'; data.simStart = nowS() - 1e7; brdRender(); return; }
+    teach(b.dataset.a, b.dataset.o ? {o: b.dataset.o} : null);
+  });
+  $('#lbx').onchange = e => { showLB = e.target.checked; localStorage.setItem('ig_lb', showLB ? '1' : '0'); brdRender(true); };
+  $('#csv').onclick = exportCSV;
+  $('#hide').onclick = () => { showCtl = false; brdCtl(); };
+}
+
+function brdShell() {
+  $('#app').innerHTML = `<div class="brd"><div class="ctl" id="ctl"></div><button class="hideCtl" id="ctlbtn" style="display:none">Controls</button><div class="stage" id="stage"></div></div>`;
+  $('#ctlbtn').onclick = () => { showCtl = true; brdCtl(); };
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.code === 'Space' || e.key === 'ArrowRight') { e.preventDefault(); const pa = primaryAction(); if (pa && pa[0] !== 'new') teach(pa[0]); }
+    if (e.key === 'c') { showCtl = !showCtl; brdCtl(); }
+  });
+}
+
+function brdRender(force) {
+  brdCtl();
+  const d = data, st = $('#stage');
+  if (simRAF) { cancelAnimationFrame(simRAF); simRAF = 0; }
+  if (!d || d.phase === 'none') { st.innerHTML = `<div class="huge">Investment game</div><p class="center sub">Enter the PIN and press “New session”.</p>`; return; }
+  const P = d.players || [];
+  const flipping = d.phase === 'round_closed' && nowS() < d.revealAt;
+  let h = '';
+  if (d.phase === 'lobby') {
+    const link = location.origin + location.pathname + '?g=' + encodeURIComponent(G) + (QS.get('api') ? '&api=' + encodeURIComponent(QS.get('api')) : '');
+    h = `<div class="center" style="margin-top:20px"><div style="font-size:26px" class="sub">Join on your phone</div>
+      <div id="qr" style="margin:18px auto;display:inline-block"></div>
+      <div style="font-size:22px;word-break:break-all">${esc(link.replace(/^https?:\/\//, ''))}</div>
+      <div style="font-size:40px;font-weight:600;margin-top:18px">${P.length} joined</div>
+      <div class="chips">${P.map(p => `<span class="chip">${esc(p.name)}</span>`).join('')}</div></div>`;
+    st.innerHTML = h;
+    try { const q = qrcode(0, 'M'); q.addData(link); q.make(); $('#qr').innerHTML = q.createSvgTag({cellSize: 7, margin: 2}); } catch (e) {}
+    return;
+  }
+  if (d.phase === 'round_open' || d.phase === 'round_closed') {
+    const r = flipping || d.phase === 'round_open' ? d.round - 1 : d.round;
+    const o = d.outcomes[d.round - 1];
+    h += `<div class="head"><h2>Round ${d.round} of ${d.rounds}</h2>`;
+    if (d.phase === 'round_open') h += `<span style="font-size:28px" class="sub"><b style="color:var(--ink)">${d.nSubmitted}</b> of ${d.nEligible} submitted</span>`;
+    else if (!flipping) h += `<span class="banner ${o === 'H' ? 'gain' : 'loss'}">${o === 'H' ? 'Heads: fund +100%' : 'Tails: fund −50%'}</span>`;
+    h += `</div>` + metricsRow(P, r, d) + `<div class="two"><div class="panel">${pathsChart(P, r, d)}</div><div class="panel">${sharesChart(P, r, d)}</div></div>`;
+    if (flipping) h += `<div class="overlay" id="ov"><div class="coin" id="coin"><div class="face h">+100%<small>Heads</small></div><div class="face t">−50%<small>Tails</small></div></div></div>`;
+    st.innerHTML = h;
+    if (flipping) {
+      const n = d.outcomes.length;
+      if (coinShown !== n) { coinShown = n; brdRender.coin = {t0: nowS(), dur: Math.max(900, d.revealAt - nowS())}; setTimeout(() => brdRender(true), brdRender.coin.dur + 250); }
+      const cs = brdRender.coin, end = 360 * 6 + (o === 'T' ? 180 : 0);
+      const an = $('#coin').animate([{transform: 'translateY(0) rotateY(0deg)'}, {transform: 'translateY(-130px) rotateY(' + end * 0.6 + 'deg)', offset: 0.45}, {transform: 'translateY(0) rotateY(' + end + 'deg)'}], {duration: cs.dur, easing: 'cubic-bezier(.25,.6,.35,1)', fill: 'forwards'});
+      an.currentTime = Math.min(cs.dur, nowS() - cs.t0);
+    }
+    return;
+  }
+  if (d.phase === 'results') {
+    const r = d.round;
+    h += `<div class="head"><h2>Result after ${r} rounds</h2></div>` + metricsRow(P, r, d);
+    h += `<div class="${showLB ? 'three' : 'two'}">`;
+    if (showLB) h += `<div class="panel">${leaderboard(P.filter(p => p.w[r] != null).map(p => [p.name, p.w[r]]))}</div>`;
+    h += `<div class="panel"><p class="cap">Fixed shares on the same ${r} coin flips</p>${shadowChart(P, r, d)}</div>`;
+    h += `<div class="panel"><p class="cap">Average share after a loss and after a gain</p>${slopeChart(P, d)}</div></div>`;
+    st.innerHTML = h; return;
+  }
+  const c = (d.commits || [])[d.commitNo - 1] || {shares: {}};
+  if (d.phase === 'commit_open') {
+    h = `<div class="huge" style="font-size:54px">New game: one fixed share</div><p class="center sub" style="font-size:24px">Start again with 1000 kr. Your share is used in all ${d.simRounds} rounds.</p>
+      <div class="huge">${d.nSubmitted} <span class="sub" style="font-size:40px">of ${d.nEligible} locked in</span></div>`;
+    st.innerHTML = h; return;
+  }
+  if (d.phase === 'commit_closed') {
+    const sh = Object.values(c.shares);
+    h = `<div class="head"><h2>Shares are locked</h2><span class="sub" style="font-size:22px">${sh.length} players · press Play</span></div><div class="panel">${commitStrip(sh)}</div>`;
+    st.innerHTML = h; return;
+  }
+  if (d.phase === 'sim') {
+    st.innerHTML = `<div class="head"><h2>${d.simRounds} rounds with a fixed share</h2><span id="simr" class="sub" style="font-size:22px"></span></div>
+      <div class="${showLB ? 'two' : ''}" style="${showLB ? 'grid-template-columns:minmax(0,2.4fr) minmax(0,1fr)' : ''}"><div class="panel" id="simp"></div>${showLB ? '<div class="panel" id="simlb"></div>' : ''}</div>`;
+    const groups = simGroups(c), endT = d.simStart + d.simRounds * d.simStepMs;
+    const tick = () => {
+      const k = Math.max(0, Math.min(d.simRounds, Math.floor((nowS() - d.simStart) / d.simStepMs)));
+      $('#simp').innerHTML = simChart(groups, c.path, k, d.simRounds);
+      $('#simr').textContent = k < d.simRounds ? `Round ${k} of ${d.simRounds}` : 'This was one of many possible paths';
+      if (showLB && $('#simlb')) $('#simlb').innerHTML = k < d.simRounds ? '<p class="cap">Leaderboard after the last round</p>' : leaderboard(Object.entries(c.shares).map(([n, s]) => [n, simW(s, c.path)]), s => s);
+      if (nowS() < endT + 50) simRAF = requestAnimationFrame(tick);
+    };
+    tick(); return;
+  }
+  if (d.phase === 'dist') {
+    const commits = Object.values(c.shares);
+    let shares = [10, 50, 100];
+    if (distSet === 'two') shares = [50, 100];
+    if (distSet === 'class' && commits.length) { const u = commits.slice().sort((a, b) => a - b); shares = [...new Set([u[0], median(u) - median(u) % 10, u[u.length - 1]])]; }
+    h = `<div class="head"><h2>Wealth after ${d.simRounds} rounds: all possible paths</h2>
+      <span class="seg"><button data-ds="preset" class="${distSet === 'preset' ? 'on' : ''}">10 · 50 · 100%</button><button data-ds="two" class="${distSet === 'two' ? 'on' : ''}">50 · 100%</button><button data-ds="class" class="${distSet === 'class' ? 'on' : ''}">Class: low · median · high</button></span>
+      <span class="seg"><button data-ax="log" class="${!distLinear ? 'on' : ''}">Log scale</button><button data-ax="lin" class="${distLinear ? 'on' : ''}">Kroner</button></span></div>
+      <div class="panel">${distChart(shares, commits, d.simRounds, distLinear)}</div>
+      <div class="panel" style="margin-top:12px">${probTable(shares, d.simRounds)}</div>`;
+    st.innerHTML = h;
+    st.querySelectorAll('[data-ds]').forEach(b => b.onclick = () => { distSet = b.dataset.ds; brdRender(true); });
+    st.querySelectorAll('[data-ax]').forEach(b => b.onclick = () => { distLinear = b.dataset.ax === 'lin'; brdRender(true); });
+  }
+}
+
+const simW = (s, path) => { let w = START; for (const o of path) w = step(w, s, o); return w; };
+
+function metricsRow(P, r, d) {
+  const ws = P.map(p => p.w[r]).filter(v => v != null);
+  const tot = ws.reduce((a, b) => a + b, 0);
+  return `<div class="metrics">
+    <div class="metric"><div class="l">Class wealth</div><div class="v">${kr(tot)}</div><div class="s">start: ${kr(ws.length * START)}</div></div>
+    <div class="metric"><div class="l">Average</div><div class="v">${ws.length ? kr(mean(ws)) : '–'}</div></div>
+    <div class="metric"><div class="l">Median</div><div class="v">${ws.length ? kr(median(ws)) : '–'}</div></div>
+    <div class="metric"><div class="l">Players</div><div class="v">${ws.length}</div><div class="s">after round ${r}</div></div></div>`;
+}
+
+function pathsChart(P, r, d) {
+  const W = 620, H = 360, ml = 66, mr = 70, mt = 14, mb = 44;
+  const vals = []; P.forEach(p => p.w.forEach((v, i) => { if (v != null && i <= r) vals.push(v); }));
+  const lo = Math.min(START * 0.5, ...vals) * 0.85, hi = Math.max(START * 2, ...vals) * 1.2;
+  const x = i => ml + i / d.rounds * (W - ml - mr), y = logScale(lo, hi, H - mb, mt);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  niceLogTicks(lo, hi).forEach(v => s += `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}" stroke="${C.grid}"/>` + T(ml - 8, y(v) + 5, kr(v), {a: 'end'}));
+  s += `<line x1="${ml}" x2="${W - mr}" y1="${y(START)}" y2="${y(START)}" stroke="${C.base}" stroke-width="1.5" stroke-dasharray="6 5"/>`;
+  for (let i = 0; i <= d.rounds; i++) s += T(x(i), H - mb + 22, i, {a: 'middle'});
+  s += T((ml + W - mr) / 2, H - 4, 'Round', {a: 'middle', c: C.sub});
+  P.forEach(p => { const pts = []; for (let i = 0; i <= r; i++) if (p.w[i] != null) pts.push(x(i) + ',' + y(p.w[i])); if (pts.length > 1) s += `<polyline fill="none" stroke="${C.grey}" stroke-opacity=".5" stroke-width="1.6" points="${pts.join(' ')}"/>`; });
+  const med = []; for (let i = 0; i <= r; i++) { const a = P.map(p => p.w[i]).filter(v => v != null); if (a.length) med.push([i, median(a)]); }
+  if (med.length > 1) { s += `<polyline fill="none" stroke="${C.accent}" stroke-width="3.5" stroke-linecap="round" points="${med.map(m => x(m[0]) + ',' + y(m[1])).join(' ')}"/>`; const L = med[med.length - 1]; s += T(x(L[0]) + 8, y(L[1]) + 5, 'median', {c: C.accent, fs: 15}); }
+  return s + '</svg>';
+}
+
+function sharesChart(P, r, d) {
+  const W = 620, H = 360, ml = 56, mr = 14, mt = 14, mb = 44;
+  const x = i => ml + (i - 0.5) / d.rounds * (W - ml - mr), y = f => mt + (H - mt - mb) * (1 - f / 100);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  [0, 25, 50, 75, 100].forEach(f => s += `<line x1="${ml}" x2="${W - mr}" y1="${y(f)}" y2="${y(f)}" stroke="${C.grid}"/>` + T(ml - 8, y(f) + 5, f + '%', {a: 'end'}));
+  for (let i = 1; i <= d.rounds; i++) {
+    s += T(x(i), H - mb + 20, i, {a: 'middle'});
+    const o = d.outcomes[i - 1];
+    if (o && i <= r) s += T(x(i), H - 4, o === 'H' ? 'gain' : 'loss', {a: 'middle', c: o === 'H' ? C.gain : C.loss, fs: 14});
+  }
+  for (let i = 1; i <= r; i++) {
+    const sh = [];
+    P.forEach((p, k) => { const v = p.sh[i]; if (v == null) return; sh.push(v); s += `<circle cx="${x(i) + (hash(p.name, i) - 0.5) * 34}" cy="${y(v)}" r="5" fill="${C.grey}" fill-opacity=".55"/>`; });
+    if (sh.length) { const m = mean(sh); s += `<line x1="${x(i) - 26}" x2="${x(i) + 26}" y1="${y(m)}" y2="${y(m)}" stroke="${C.accent}" stroke-width="4" stroke-linecap="round"/>`; }
+  }
+  return s + '</svg>';
+}
+
+function leaderboard(rows) {
+  rows.sort((a, b) => b[1] - a[1]);
+  const top = rows.slice(0, 10);
+  return `<table class="lb">${top.map((r, i) => `<tr><td class="muted">${i + 1}</td><td>${esc(r[0])}</td><td class="r">${kr(r[1])}</td></tr>`).join('')}</table>${rows.length > 10 ? `<p class="muted" style="margin:6px 0 0">… and ${rows.length - 10} more</p>` : ''}`;
+}
+
+function shadowChart(P, r, d) {
+  const outs = d.outcomes.slice(0, r), fixed = [0, 25, 50, 100].map(s => [s, outs.reduce((w, o) => step(w, s, o), START)]);
+  const act = P.map(p => p.w[r]).filter(v => v != null);
+  const all = act.concat(fixed.map(f => f[1]), [START]);
+  const lo = Math.min(...all) * 0.7, hi = Math.max(...all) * 1.4;
+  const W = 520, H = 320, ml = 92, mr = 20, mt = 10, mb = 40, x = logScale(lo, hi, ml, W - mr);
+  const rows = [['Students', null]].concat(fixed.map(f => ['Fixed ' + f[0] + '%', f]));
+  const rowY = i => mt + 24 + i * ((H - mt - mb - 24) / (rows.length - 1));
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  niceLogTicks(lo, hi).forEach(v => s += `<line x1="${x(v)}" x2="${x(v)}" y1="${mt}" y2="${H - mb}" stroke="${C.grid}"/>` + T(x(v), H - mb + 20, kr(v), {a: 'middle', fs: 13}));
+  s += `<line x1="${x(START)}" x2="${x(START)}" y1="${mt}" y2="${H - mb}" stroke="${C.base}" stroke-dasharray="5 4" stroke-width="1.5"/>`;
+  rows.forEach((rw, i) => {
+    const yy = rowY(i); s += T(ml - 10, yy + 5, rw[0], {a: 'end', c: C.sub, fs: 15});
+    if (i === 0) act.forEach((v, k) => s += `<circle cx="${x(v)}" cy="${yy + (hash('a' + k, 3) - 0.5) * 18}" r="5" fill="${C.grey}" fill-opacity=".55"/>`);
+    else { s += `<circle cx="${x(rw[1][1])}" cy="${yy}" r="8" fill="${shareCol(rw[1][0])}" stroke="#fff" stroke-width="2"/>` + T(x(rw[1][1]), yy - 13, kr(rw[1][1]), {a: 'middle', c: C.ink, fs: 14}); }
+  });
+  s += T((ml + W - mr) / 2, H - 2, 'Wealth (kr, log scale)', {a: 'middle', c: C.sub, fs: 13});
+  return s + '</svg>';
+}
+
+function slopeChart(P, d) {
+  const rows = [];
+  P.forEach(p => {
+    const aw = [], al = [];
+    for (let i = 2; i <= d.round; i++) {
+      if (p.sh[i] == null || p.sh[i - 1] == null || !p.sub[i]) continue; // played both rounds and chose actively
+      (d.outcomes[i - 2] === 'H' ? aw : al).push(p.sh[i]);
+    }
+    if (aw.length && al.length) rows.push([mean(al), mean(aw)]);
+  });
+  if (!rows.length) return `<p class="sub" style="font-size:18px;margin:40px 10px">Needs at least one gain and one loss before the last round.</p>`;
+  const W = 420, H = 330, ml = 56, mr = 30, mt = 36, mb = 40, x0 = ml + 30, x1 = W - mr - 30, y = f => mt + (H - mt - mb) * (1 - f / 100);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  [0, 25, 50, 75, 100].forEach(f => s += `<line x1="${ml}" x2="${W - mr}" y1="${y(f)}" y2="${y(f)}" stroke="${C.grid}"/>` + T(ml - 8, y(f) + 5, f + '%', {a: 'end'}));
+  s += T(x0, H - 12, 'After a loss', {a: 'middle', c: C.sub}) + T(x1, H - 12, 'After a gain', {a: 'middle', c: C.sub});
+  let up = 0;
+  rows.forEach(r => { const u = r[1] > r[0] + 2; if (u) up++; const c = u ? C.accent : C.grey; s += `<line x1="${x0}" x2="${x1}" y1="${y(r[0])}" y2="${y(r[1])}" stroke="${c}" stroke-opacity="${u ? .7 : .5}" stroke-width="2"/><circle cx="${x0}" cy="${y(r[0])}" r="4" fill="${c}"/><circle cx="${x1}" cy="${y(r[1])}" r="4" fill="${c}"/>`; });
+  s += T(W / 2, 16, `${up} of ${rows.length} took more risk after a gain`, {a: 'middle', c: C.ink, fs: 15, w: 500});
+  return s + '</svg>';
+}
+
+function commitStrip(sh) {
+  const W = 1100, H = 170, ml = 30, mr = 30, x = s => ml + s / 100 * (W - ml - mr);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  const cnt = {}; sh.forEach(v => cnt[v] = (cnt[v] || 0) + 1);
+  [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].forEach(v => s += T(x(v), H - 8, v + '%', {a: 'middle', fs: 16}));
+  Object.entries(cnt).forEach(([v, n]) => { for (let i = 0; i < n; i++) s += `<circle cx="${x(+v)}" cy="${H - 34 - i * 20}" r="8" fill="${shareCol(+v)}"/>`; });
+  return s + '</svg>';
+}
+
+function simGroups(c) {
+  const g = {};
+  Object.entries(c.shares).forEach(([n, s]) => { if (s == null) return; (g[s] = g[s] || []).push(n); });
+  return Object.keys(g).map(Number).sort((a, b) => a - b).map(s => ({s, names: g[s].sort()}));
+}
+
+function simChart(groups, path, k, n) {
+  const W = 980, H = 470, ml = 78, mr = 250, mt = 14, mb = 44;
+  if (!groups.length) return '<p class="sub">No shares were locked in.</p>';
+  const paths = groups.map(g => { const a = [START]; for (let i = 0; i < n; i++) a.push(step(a[i], g.s, path[i])); return a; });
+  const all = paths.flat(), lo = Math.min(START, ...all) * 0.6, hi = Math.max(START, ...all) * 1.6;
+  const x = i => ml + i / n * (W - ml - mr), y = logScale(lo, hi, H - mb, mt);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  niceLogTicks(lo, hi).forEach(v => s += `<line x1="${ml}" x2="${W - mr}" y1="${y(v)}" y2="${y(v)}" stroke="${C.grid}"/>` + T(ml - 8, y(v) + 5, kr(v), {a: 'end'}));
+  s += `<line x1="${ml}" x2="${W - mr}" y1="${y(START)}" y2="${y(START)}" stroke="${C.base}" stroke-width="1.5" stroke-dasharray="6 5"/>`;
+  for (let i = 0; i <= n; i += 10) s += T(x(i), H - mb + 22, i, {a: 'middle'});
+  s += T((ml + W - mr) / 2, H - 4, 'Round', {a: 'middle', c: C.sub});
+  groups.forEach((g, gi) => s += `<polyline fill="none" stroke="${shareCol(Math.max(g.s, 8))}" stroke-width="${g.s === 0 ? 2 : 2.6}" stroke-linejoin="round" ${g.s === 0 ? 'stroke-dasharray="6 4"' : ''} points="${paths[gi].slice(0, k + 1).map((v, i) => x(i) + ',' + y(v)).join(' ')}"/>`);
+  if (k >= n) { // labels, spread apart
+    const gap = 19, top = mt + 8, bot = H - mb;
+    let L = groups.map((g, gi) => ({g, yv: y(paths[gi][n]), y: y(paths[gi][n])})).sort((a, b) => a.y - b.y);
+    const full = L.length * gap <= bot - top;
+    for (let it = 0; it < 60; it++) { for (let i = 1; i < L.length; i++) if (L[i].y < L[i - 1].y + gap) L[i].y = L[i - 1].y + gap; for (let i = L.length - 2; i >= 0; i--) if (L[i].y > L[i + 1].y - gap) L[i].y = L[i + 1].y - gap; L.forEach(l => l.y = Math.max(top, Math.min(bot, l.y))); }
+    L.forEach((l, i) => {
+      const showNames = full || i < 3 || i >= L.length - 3;
+      let nm = l.g.names.slice(0, 3).join(', ') + (l.g.names.length > 3 ? ` +${l.g.names.length - 3}` : '');
+      const txt = `<tspan font-weight="600">${l.g.s}%</tspan>${showNames ? ': ' + esc(nm) : ''}`;
+      s += `<line x1="${x(n) + 2}" x2="${x(n) + 12}" y1="${l.yv}" y2="${l.y - 4}" stroke="${C.base}"/>`;
+      s += `<text x="${x(n) + 15}" y="${l.y}" font-size="14" fill="${C.ink}">${txt}</text>`;
+    });
+  }
+  return s + '</svg>';
+}
+
+function distChart(shares, commits, n, linear) {
+  const W = 1100, H = 420, ml = 70, mr = 30, mt = 56, mb = 50;
+  const dash = ['', '9 6', '3 5'], cols = shares.length === 2 ? [C.accent, C.orange] : [C.grey, C.accent, C.orange];
+  const par = s => { const f = s / 100; return {mu: Math.log(START) + n / 2 * Math.log((1 + f) * (1 - f / 2)), sg: Math.sqrt(n / 4) * Math.log((1 + f) / (1 - f / 2)), mean: START * Math.pow(1 + 0.25 * f, n)}; };
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  // legend
+  shares.forEach((sh, i) => { const lx = ml + i * 240; s += `<line x1="${lx}" x2="${lx + 30}" y1="14" y2="14" stroke="${cols[i]}" stroke-width="3" stroke-dasharray="${dash[i]}"/>` + T(lx + 38, 19, sh + '% in the fund', {c: C.ink, fs: 16}) + T(lx + 38, 36, 'median ' + kr(finalW(sh, n, n / 2)), {c: cols[i], fs: 13}); });
+  s += `<rect x="${ml + shares.length * 240 + 4}" y="8" width="11" height="11" fill="none" stroke="${C.sub}" stroke-width="2" transform="rotate(45 ${ml + shares.length * 240 + 9.5} 13.5)"/>` + T(ml + shares.length * 240 + 24, 19, 'average', {c: C.sub, fs: 16});
+  if (!linear) {
+    const lo = -3, hi = 9, X = e => ml + (e - lo) / (hi - lo) * (W - ml - mr);
+    const ps = shares.map(par), peaks = ps.map(p => p.sg > 0 ? 1 / (p.sg / Math.LN10 * Math.sqrt(2 * Math.PI)) : 0);
+    const ymax = Math.max(0.3, ...peaks) * 1.15, Y = v => H - mb - v / ymax * (H - mt - mb);
+    [-2, 0, 2, 3, 4, 6, 8].forEach(e => s += `<line x1="${X(e)}" x2="${X(e)}" y1="${mt}" y2="${H - mb}" stroke="${C.grid}"/>` + T(X(e), H - mb + 22, kr(Math.pow(10, e)), {a: 'middle'}));
+    s += `<line x1="${X(3)}" x2="${X(3)}" y1="${mt}" y2="${H - mb}" stroke="${C.base}" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+    s += T((ml + W - mr) / 2, H - 6, 'Wealth after ' + n + ' rounds (kr, log scale)', {a: 'middle', c: C.sub});
+    ps.forEach((p, i) => {
+      if (!(p.sg > 0)) { s += `<line x1="${X(3)}" x2="${X(3)}" y1="${mt}" y2="${H - mb}" stroke="${cols[i]}" stroke-width="4" stroke-dasharray="${dash[i]}"/>` + T(X(3) + 8, mt + 14, '0%: always 1000', {c: cols[i], fs: 14}); return; }
+      const m = p.mu / Math.LN10, sd = p.sg / Math.LN10, pts = [];
+      for (let e = lo; e <= hi + 1e-9; e += 0.03) pts.push(X(e) + ',' + Y(Math.exp(-((e - m) ** 2) / (2 * sd * sd)) / (sd * Math.sqrt(2 * Math.PI))));
+      s += `<polyline fill="none" stroke="${cols[i]}" stroke-width="3" stroke-dasharray="${dash[i]}" stroke-linejoin="round" points="${pts.join(' ')}"/>`;
+      const xm = X(Math.min(hi, Math.log10(p.mean)));
+      s += `<rect x="${xm - 6}" y="${H - mb - 20 - i * 16}" width="12" height="12" fill="#fff" stroke="${cols[i]}" stroke-width="2.5" transform="rotate(45 ${xm} ${H - mb - 14 - i * 16})"/>`;
+    });
+  } else {
+    const max = 150000, X = v => ml + v / max * (W - ml - mr), ymax = 0.12, Y = v => H - mb - Math.min(v, ymax) / ymax * (H - mt - mb);
+    [0, 25000, 50000, 75000, 100000, 125000, 150000].forEach(v => s += `<line x1="${X(v)}" x2="${X(v)}" y1="${mt}" y2="${H - mb}" stroke="${C.grid}"/>` + T(X(v), H - mb + 22, v ? kr(v) : '0', {a: 'middle'}));
+    s += T((ml + W - mr) / 2, H - 6, 'Wealth after ' + n + ' rounds (kr). Curves are cut at the top.', {a: 'middle', c: C.sub});
+    shares.map(par).forEach((p, i) => {
+      if (!(p.sg > 0)) { s += `<line x1="${X(1000)}" x2="${X(1000)}" y1="${mt}" y2="${H - mb}" stroke="${cols[i]}" stroke-width="4"/>`; return; }
+      const pts = []; for (let v = 40; v <= max; v += v < 4000 ? 40 : 400) pts.push(X(v) + ',' + Y(1000 * Math.exp(-((Math.log(v) - p.mu) ** 2) / (2 * p.sg * p.sg)) / (v * p.sg * Math.sqrt(2 * Math.PI))));
+      s += `<polyline fill="none" stroke="${cols[i]}" stroke-width="3" stroke-dasharray="${dash[i]}" points="${pts.join(' ')}"/>`;
+      if (p.mean < max) { const xm = X(p.mean); s += `<rect x="${xm - 6}" y="${H - mb - 20 - i * 16}" width="12" height="12" fill="#fff" stroke="${cols[i]}" stroke-width="2.5" transform="rotate(45 ${xm} ${H - mb - 14 - i * 16})"/>`; }
+      else s += T(W - mr, mt + 40 + i * 20, 'average ' + kr(p.mean) + ' →', {a: 'end', c: cols[i], fs: 15});
+    });
+  }
+  return s + '</svg>';
+}
+
+function probTable(shares, n) {
+  const ref = finalW(50, n, n / 2);
+  const rows = shares.map(s => [s, stats(s, n, ref)]);
+  return `<table class="tbl"><tr><th>Share in the fund</th><th>Median</th><th>Average</th><th>Ends below 1000</th><th>Reaches the average</th><th>Beats the median of 50% (${kr(ref)})</th></tr>
+    ${rows.map(([s, t]) => `<tr><td><b>${s}%</b></td><td>${kr(t.median)}</td><td>${kr(t.mean)}</td><td>${pct(t.below)}</td><td>${pct(t.reach)}</td><td>${s === 50 ? '–' : pct(t.beat)}</td></tr>`).join('')}</table>`;
+}
+
+function exportCSV() {
+  const d = data; if (!d || !d.players) return;
+  const R = d.rounds, nc = (d.commits || []).length;
+  const head = ['name', 'late_join'];
+  for (let i = 1; i <= R; i++) head.push('share_r' + i, 'submitted_r' + i);
+  for (let i = 0; i <= R; i++) head.push('wealth_r' + i);
+  for (let c = 1; c <= nc; c++) head.push('commit' + c + '_share', 'commit' + c + '_wealth');
+  head.push('outcomes', 'session');
+  const lines = [head.join(',')];
+  d.players.forEach(p => {
+    const row = [JSON.stringify(p.name), p.late];
+    for (let i = 1; i <= R; i++) row.push(p.sh[i] ?? '', p.sub[i] ?? '');
+    for (let i = 0; i <= R; i++) row.push(p.w[i] ?? '');
+    (d.commits || []).forEach(c => { const s = c.shares[p.name]; row.push(s ?? '', s != null && c.path ? simW(s, c.path).toFixed(2) : ''); });
+    row.push(d.outcomes.join(''), d.session);
+    lines.push(row.join(','));
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines.join('\n')], {type: 'text/csv'}));
+  a.download = `invest-game-${G}-${d.session}.csv`; a.click();
+}
+
+/* ===== start ===== */
+if (BOARD) {
+  brdShell(); brdRender(); brdPoll(true);
+  setInterval(() => brdPoll(false), 2000);
+} else {
+  stuRender(); stuPoll(true);
+  setInterval(() => stuPoll(false), 3000 + Math.random() * 800);
+  setInterval(stuTick, 500);
+}
+</script>
+</body>
+</html>
