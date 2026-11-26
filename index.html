@@ -73,9 +73,9 @@ input{font:inherit;padding:10px 12px;border:1px solid #cfcdc5;border-radius:var(
 .face small{font-size:20px;font-weight:500;margin-top:4px}
 .face.h{background:#e3f4ec;border-color:#13945f;color:#0b6b44}
 .face.t{background:#fbe9e8;border-color:#d23f3e;color:#9b2423;transform:rotateY(180deg)}
-.tbl{border-collapse:collapse;font-size:18px;width:100%}
-.tbl th,.tbl td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right}
-.tbl th{font-weight:500;color:var(--sub);font-size:15px}
+.tbl{border-collapse:collapse;font-size:24px;width:100%}
+.tbl th,.tbl td{padding:12px 12px;border-bottom:1px solid var(--line);text-align:right}
+.tbl th{font-weight:500;color:var(--sub);font-size:17px}
 .tbl td:first-child,.tbl th:first-child{text-align:left}
 .seg{display:inline-flex;border:1px solid #cfcdc5;border-radius:var(--r);overflow:hidden}
 .seg button{border:0;border-radius:0;padding:7px 12px;font-size:14px;white-space:nowrap}
@@ -307,7 +307,7 @@ async function stuSubmit() {
 let pin = localStorage.getItem('ig_pin') || '', showCtl = true, showLB = localStorage.getItem('ig_lb') !== '0';
 const COIN_SPIN = 2000, COIN_HOLD = 500;
 let coinEnd = 0;
-let menuOpen = false, manualCoin = localStorage.getItem('ig_manual') === '1';
+let distTable = false, menuOpen = false, manualCoin = localStorage.getItem('ig_manual') === '1';
 let distSet = 'preset', distLinear = false, distView = 'dist', mmAxis = 'log', msg = '', coinShown = -1, simRAF = 0, renderedKey = '';
 
 async function brdPoll(force) {
@@ -489,9 +489,8 @@ function brdRender(force) {
     if (distView === 'dist') {
       h = `<div class="head"><h2>All paths, ${d.simRounds} rounds</h2>${views}
         <span class="seg"><button data-ds="preset" class="${distSet === 'preset' ? 'on' : ''}">10 · 50 · 100%</button><button data-ds="two" class="${distSet === 'two' ? 'on' : ''}">50 · 100%</button><button data-ds="class" class="${distSet === 'class' ? 'on' : ''}">Players: low · median · high</button></span>
-        <span class="seg"><button data-ax="log" class="${!distLinear ? 'on' : ''}">Log scale</button><button data-ax="lin" class="${distLinear ? 'on' : ''}">Kroner</button></span></div>
-        <div class="panel" style="--fitH:calc(100vh - 380px)">${distChart(shares, commits, d.simRounds, distLinear)}</div>
-        <div class="panel" style="margin-top:12px">${probTable(shares, d.simRounds)}</div>`;
+        <span class="seg"><button data-ax="log" class="${!distLinear && !distTable ? 'on' : ''}">Log scale</button><button data-ax="lin" class="${distLinear && !distTable ? 'on' : ''}">Kroner</button><button data-ax="tbl" class="${distTable ? 'on' : ''}">Table</button></span></div>
+        ${distTable ? `<div class="panel" style="padding:20px">${probTable(shares, d.simRounds)}</div>` : `<div class="panel" style="--fitH:calc(100vh - 200px)">${distChart(shares, commits, d.simRounds, distLinear)}</div>`}`;
     } else {
       h = `<div class="head"><h2>Median vs average, ${d.simRounds} rounds</h2>${views}
         <span class="seg"><button data-mx="log" class="${mmAxis === 'log' ? 'on' : ''}">Log scale</button><button data-mx="lin" class="${mmAxis === 'lin' ? 'on' : ''}">Kroner</button><button data-mx="full" class="${mmAxis === 'full' ? 'on' : ''}">Kroner, full scale</button></span></div>
@@ -500,7 +499,7 @@ function brdRender(force) {
     st.innerHTML = h;
     st.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { distView = b.dataset.v; brdRender(true); });
     st.querySelectorAll('[data-ds]').forEach(b => b.onclick = () => { distSet = b.dataset.ds; brdRender(true); });
-    st.querySelectorAll('[data-ax]').forEach(b => b.onclick = () => { distLinear = b.dataset.ax === 'lin'; brdRender(true); });
+    st.querySelectorAll('[data-ax]').forEach(b => b.onclick = () => { distTable = b.dataset.ax === 'tbl'; if (!distTable) distLinear = b.dataset.ax === 'lin'; brdRender(true); });
     st.querySelectorAll('[data-mx]').forEach(b => b.onclick = () => { mmAxis = b.dataset.mx; brdRender(true); });
   }
 }
@@ -648,25 +647,26 @@ function simChart(groups, path, k, n) {
 }
 
 function distChart(shares, commits, n, linear) {
-  const W = 1100, H = 450, ml = 70, mr = 40, mt = 78, mb = 84, base = H - mb, rowY = base + 20;
+  const W = 1100, H = 540, ml = 70, mr = 40, mt = 128, mb = 84, base = H - mb, rowY = base + 20;
   const dash = ['', '9 6', '3 5'], cols = shares.length === 2 ? [C.accent, C.orange] : shares.length === 1 ? [C.accent] : [C.grey, C.accent, C.orange];
   const par = s => { const f = s / 100; return {mu: Math.log(START) + n / 2 * Math.log((1 + f) * (1 - f / 2)), sg: Math.sqrt(n / 4) * Math.log((1 + f) / (1 - f / 2)), mean: START * Math.pow(1 + 0.25 * f, n), med: finalW(s, n, n / 2)}; };
-  const ps = shares.map(par);
+  const ps = shares.map(par), ref = finalW(50, n, n / 2), st = shares.map(sh => stats(sh, n, ref));
   const dia = (x, y, c, r = 6) => `<rect x="${x - r}" y="${y - r}" width="${2 * r}" height="${2 * r}" fill="#fff" stroke="${c}" stroke-width="2.4" transform="rotate(45 ${x} ${y})"/>`;
   let s = `<svg viewBox="0 0 ${W} ${H}" class="fit">`;
   // legend: name, then circle + median, then diamond + average
   shares.forEach((sh, i) => {
-    const lx = ml + 10 + i * 300;
-    s += `<line x1="${lx}" x2="${lx + 34}" y1="14" y2="14" stroke="${cols[i]}" stroke-width="3.5" stroke-dasharray="${dash[i]}"/>` + T(lx + 44, 20, sh + '% in the fund', {c: C.ink, fs: 18, w: 500});
-    s += `<circle cx="${lx + 52}" cy="41" r="6" fill="${cols[i]}"/>` + T(lx + 66, 46, 'median ' + kr(ps[i].med), {c: cols[i], fs: 15});
-    s += dia(lx + 52, 62, cols[i], 5.5) + T(lx + 66, 67, 'average ' + kr(ps[i].mean), {c: cols[i], fs: 15});
+    const lx = ml + 10 + i * 330;
+    s += `<line x1="${lx}" x2="${lx + 34}" y1="15" y2="15" stroke="${cols[i]}" stroke-width="3.5" stroke-dasharray="${dash[i]}"/>` + T(lx + 44, 21, sh + '% in the fund', {c: C.ink, fs: 20, w: 500});
+    s += `<circle cx="${lx + 52}" cy="44" r="6" fill="${cols[i]}"/>` + T(lx + 66, 50, 'median ' + kr(ps[i].med), {c: cols[i], fs: 17});
+    s += dia(lx + 52, 67, cols[i], 5.5) + T(lx + 66, 73, 'average ' + kr(ps[i].mean), {c: cols[i], fs: 17});
+    s += T(lx + 66, 96, 'ends below 1000: ' + pct(st[i].below), {c: C.sub, fs: 16}) + T(lx + 66, 117, 'reaches the average: ' + pct(st[i].reach), {c: C.sub, fs: 16});
   });
   let X;
   if (!linear) {
     const lo = -3, hi = 9; X = v => ml + (Math.log10(Math.max(v, 1e-9)) - lo) / (hi - lo) * (W - ml - mr);
     const peaks = ps.map(p => p.sg > 0 ? 1 / (p.sg / Math.LN10 * Math.sqrt(2 * Math.PI)) : 0);
     const ymax = Math.max(0.3, ...peaks) * 1.1, Y = v => base - v / ymax * (base - mt - 10);
-    [-2, 0, 2, 3, 4, 6, 8].forEach(e => s += `<line x1="${X(10 ** e)}" x2="${X(10 ** e)}" y1="${mt}" y2="${base}" stroke="${C.grid}"/>` + T(X(10 ** e), rowY + 30, kr(10 ** e), {a: 'middle'}));
+    [-2, 0, 2, 3, 4, 6, 8].forEach(e => s += `<line x1="${X(10 ** e)}" x2="${X(10 ** e)}" y1="${mt}" y2="${base}" stroke="${C.grid}"/>` + T(X(10 ** e), rowY + 32, kr(10 ** e), {a: 'middle', fs: 17}));
     s += `<line x1="${X(1000)}" x2="${X(1000)}" y1="${mt}" y2="${base}" stroke="${C.base}" stroke-width="1.5" stroke-dasharray="5 4"/>`;
     s += T((ml + W - mr) / 2, H - 6, 'Wealth after ' + n + ' rounds (kr, log scale)', {a: 'middle', c: C.sub});
     ps.forEach((p, i) => {
@@ -678,7 +678,7 @@ function distChart(shares, commits, n, linear) {
   } else {
     const max = 150000, ymax = 0.12, Y = v => base - Math.min(v, ymax) / ymax * (base - mt - 10);
     X = v => ml + Math.min(v, max) / max * (W - ml - mr);
-    [0, 25000, 50000, 75000, 100000, 125000, 150000].forEach(v => s += `<line x1="${X(v)}" x2="${X(v)}" y1="${mt}" y2="${base}" stroke="${C.grid}"/>` + T(X(v), rowY + 30, v ? kr(v) : '0', {a: 'middle'}));
+    [0, 25000, 50000, 75000, 100000, 125000, 150000].forEach(v => s += `<line x1="${X(v)}" x2="${X(v)}" y1="${mt}" y2="${base}" stroke="${C.grid}"/>` + T(X(v), rowY + 32, v ? kr(v) : '0', {a: 'middle', fs: 17}));
     s += T((ml + W - mr) / 2, H - 6, 'Wealth after ' + n + ' rounds (kr). Curves are cut at the top. Symbols at the right edge are further out.', {a: 'middle', c: C.sub});
     ps.forEach((p, i) => {
       if (!(p.sg > 0)) { s += `<line x1="${X(1000)}" x2="${X(1000)}" y1="${mt}" y2="${base}" stroke="${cols[i]}" stroke-width="4"/>`; return; }
