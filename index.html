@@ -207,7 +207,7 @@ function stuRender() {
     if (m.j === null || m.j > r - 1) {
       h += `<h1>Round ${r} of ${d.rounds}</h1><p class="sub">You join from the next round.</p>`;
     } else {
-      const w = m.w[r - 1], key = d.session + ':' + r;
+      const w = m.w[r - 1], key = d.session + ':' + d.run + ':' + r;
       if (pickKey !== key) { pickKey = key; pick = m.pend; saved = m.pend != null ? 'ok' : ''; }
       const s = pick == null ? null : pick;
       h += `<h1>Round ${r} of ${d.rounds}</h1><div class="muted">Your wealth</div><div class="big">${kr(w)} kr</div>
@@ -234,7 +234,7 @@ function stuRender() {
     h += `<h1>Final result</h1><div class="muted">Your wealth after ${d.rounds} rounds</div><div class="big">${kr(wNow())} kr</div>
       <div class="card">${miniPath(m)}</div>${rankLine()}<p class="muted">Look at the board.</p>`;
   } else if (d.phase === 'commit_open') {
-    const key = d.session + ':c' + d.commitNo;
+    const key = d.session + ':' + d.run + ':c' + d.commitNo;
     if (pickKey !== key) { pickKey = key; pick = m.commit; saved = m.commit != null ? 'ok' : ''; }
     const s = pick;
     h += `<h1>New game: one fixed share</h1><p class="sub">You start again with ${kr(START)} kr. Choose one share for the fund. <b>This share will be used in every round</b>, ${d.simRounds} rounds in total. Watch the board.</p>
@@ -353,7 +353,7 @@ function brdCtl() {
   if (d.phase === 'dist' && hasSim) h += `<button data-a="dist-back" data-local="1">Back to simulation</button>`;
   h += `<label><input type="checkbox" id="lbx" ${showLB ? 'checked' : ''}> Leaderboard</label>`;
   h += `<span class="sp"></span><span class="err" style="margin:0">${esc(msg)}</span>`;
-  h += `<span class="quiet"><button data-a="back">← Back</button><button data-a="jump" data-to="commit">Skip to fixed share</button><button data-a="jump" data-to="dist">Skip to distributions</button></span>`;
+  h += `<span class="quiet"><button data-a="back">← Back</button><button data-a="restart">Round-by-round game</button><button data-a="jump" data-to="commit">Fixed-share game</button><button data-a="jump" data-to="dist">Distributions</button></span>`;
   h += `<button id="csv">Export CSV</button><button data-a="new">New session</button><button id="hide">Hide controls</button>`;
   el.innerHTML = h;
   $('#pin').oninput = e => { pin = e.target.value; localStorage.setItem('ig_pin', pin); };
@@ -362,7 +362,8 @@ function brdCtl() {
     const a = b.dataset.a;
     if (a === 'back' && data && data.phase === 'round_closed' && !confirm('Undo the last coin flip? The students keep their choices for this round.')) return;
     if (a === 'back' && data && ['commit_closed', 'sim', 'dist'].indexOf(data.phase) >= 0 && (data.commits || []).length && !confirm('Reopen the fixed-share choice? The simulations are discarded.')) return;
-    if (a === 'jump' && !confirm(b.dataset.to === 'commit' ? 'Skip straight to the fixed-share game?' : 'Skip straight to the distributions?')) return;
+    if (a === 'restart' && !confirm('Start the round-by-round game again with the same players? Everyone goes back to 1000 kr. The data from this run stays in the spreadsheet.')) return;
+    if (a === 'jump' && !confirm(b.dataset.to === 'commit' ? 'Go to the fixed-share game?' : 'Go to the distributions?')) return;
     teach(a, b.dataset.o ? {o: b.dataset.o} : b.dataset.to ? {to: b.dataset.to} : null);
   });
   $('#lbx').onchange = e => { showLB = e.target.checked; localStorage.setItem('ig_lb', showLB ? '1' : '0'); brdRender(true); };
@@ -465,7 +466,7 @@ function brdRender(force) {
     const views = `<span class="seg"><button data-v="dist" class="${distView === 'dist' ? 'on' : ''}">Distributions</button><button data-v="mm" class="${distView === 'mm' ? 'on' : ''}">Median vs average</button></span>`;
     if (distView === 'dist') {
       h = `<div class="head"><h2>Wealth after ${d.simRounds} rounds: all possible paths</h2>${views}
-        <span class="seg"><button data-ds="preset" class="${distSet === 'preset' ? 'on' : ''}">10 · 50 · 100%</button><button data-ds="two" class="${distSet === 'two' ? 'on' : ''}">50 · 100%</button><button data-ds="class" class="${distSet === 'class' ? 'on' : ''}">Class: low · median · high</button></span>
+        <span class="seg"><button data-ds="preset" class="${distSet === 'preset' ? 'on' : ''}">10 · 50 · 100%</button><button data-ds="two" class="${distSet === 'two' ? 'on' : ''}">50 · 100%</button><button data-ds="class" class="${distSet === 'class' ? 'on' : ''}">Players: low · median · high</button></span>
         <span class="seg"><button data-ax="log" class="${!distLinear ? 'on' : ''}">Log scale</button><button data-ax="lin" class="${distLinear ? 'on' : ''}">Kroner</button></span></div>
         <div class="panel" style="--fitH:calc(100vh - 380px)">${distChart(shares, commits, d.simRounds, distLinear)}</div>
         <div class="panel" style="margin-top:12px">${probTable(shares, d.simRounds)}</div>`;
@@ -488,10 +489,10 @@ function metricsRow(P, r, d) {
   const ws = P.map(p => p.w[r]).filter(v => v != null);
   const tot = ws.reduce((a, b) => a + b, 0);
   return `<div class="metrics">
-    <div class="metric"><div class="l">Class wealth</div><div class="v">${kr(tot)}</div><div class="s">start: ${kr(ws.length * START)}</div></div>
+    <div class="metric"><div class="l">Total wealth</div><div class="v">${kr(tot)}</div><div class="s">start: ${kr(ws.length * START)}</div></div>
     <div class="metric"><div class="l">Average</div><div class="v">${ws.length ? kr(mean(ws)) : '–'}</div></div>
     <div class="metric"><div class="l">Median</div><div class="v">${ws.length ? kr(median(ws)) : '–'}</div></div>
-    <div class="metric"><div class="l">Players</div><div class="v">${ws.length}</div><div class="s">after round ${r}</div></div></div>`;
+    <div class="metric"><div class="l">Number of players</div><div class="v">${ws.length}</div><div class="s">after round ${r}</div></div></div>`;
 }
 
 function pathsChart(P, r, d) {
@@ -671,7 +672,7 @@ function distChart(shares, commits, n, linear) {
 }
 
 function mmChart(commits, n, axis) {
-  const W = 1100, H = 520, ml = 100, mr = 160, mt = 40, mb = 64, base = H - mb;
+  const W = 1100, H = 560, ml = 100, mr = 160, mt = 40, mb = 104, base = H - mb;
   const med = f => START * Math.pow((1 + f) * (1 - f / 2), n / 2), avg = f => START * Math.pow(1 + 0.25 * f, n);
   const X = f => ml + f * (W - ml - mr);
   let Y, ticks, ymax;
@@ -681,7 +682,7 @@ function mmChart(commits, n, axis) {
   ticks.forEach(v => s += `<line x1="${ml}" x2="${W - mr}" y1="${Y(v)}" y2="${Y(v)}" stroke="${C.grid}"/>` + T(ml - 10, Y(v) + 5, v ? kr(v) : '0', {a: 'end'}));
   if (axis === 'log') s += `<line x1="${ml}" x2="${W - mr}" y1="${Y(1000)}" y2="${Y(1000)}" stroke="${C.base}" stroke-width="1.5" stroke-dasharray="6 5"/>`;
   for (let i = 0; i <= 10; i++) s += T(X(i / 10), base + 24, i * 10 + '%', {a: 'middle'});
-  s += T((ml + W - mr) / 2, H - 6, 'Fixed share in the fund', {a: 'middle', c: C.sub});
+  s += T((ml + W - mr) / 2, base + 50, 'Fixed share in the fund', {a: 'middle', c: C.sub});
   s += T(ml - 10, 22, 'Wealth after ' + n + ' rounds (kr' + (axis === 'log' ? ', log scale)' : ')'), {c: C.sub});
   const fs = [...Array(201)].map((_, i) => i / 200);
   const av = fs.filter(f => axis === 'log' || avg(f) <= ymax * 1.03);
@@ -690,12 +691,16 @@ function mmChart(commits, n, axis) {
   const la = av[av.length - 1];
   if (la < 1) s += T(X(la) + 8, Y(avg(la)) + 16, 'average → ' + kr(avg(1)) + ' at 100%', {c: C.orange, fs: 16});
   else s += T(X(1) + 10, Y(avg(1)) + 5, 'average', {c: C.orange, fs: 17}) + T(X(1) + 10, Y(avg(1)) + 25, kr(avg(1)), {c: C.orange, fs: 15});
-  s += T(X(1) + 10, Y(med(1)) + 5 - (axis === 'full' ? 18 : 0), 'median', {c: C.accent, fs: 17}) + (axis === 'full' ? '' : T(X(1) + 10, Y(med(1)) + 25, kr(med(1)), {c: C.accent, fs: 15}));
+  if (axis === 'log') s += T(X(1) + 10, Y(med(1)) + 5, 'median', {c: C.accent, fs: 17}) + T(X(1) + 10, Y(med(1)) + 25, kr(med(1)), {c: C.accent, fs: 15});
+  else s += T(X(1) + 10, Y(med(1)) - 14, 'median ' + kr(med(1)), {c: C.accent, fs: 17});
   s += `<circle cx="${X(0.5)}" cy="${Y(med(0.5))}" r="7" fill="${C.accent}" stroke="#fff" stroke-width="2.5"/>`;
   if (axis !== 'full') s += T(X(0.5), Y(med(0.5)) - 16, 'highest median: ' + kr(med(0.5)) + ' at 50%', {a: 'middle', c: C.accent, fs: 16});
-  // class choices along the x-axis
-  const cnt = {}; commits.forEach(v => cnt[v] = (cnt[v] || 0) + 1);
-  Object.entries(cnt).forEach(([v, k]) => { for (let j = 0; j < k; j++) s += `<circle cx="${X(+v / 100)}" cy="${base - 8 - j * 11}" r="4.5" fill="${shareCol(+v)}" stroke="#fff" stroke-width="1"/>`; });
+  // players' choices in a separate band below the axis (only the position along the x-axis matters)
+  if (commits.length) {
+    const by = base + 76, cnt = {}; commits.forEach(v => cnt[v] = (cnt[v] || 0) + 1);
+    s += `<rect x="${ml - 6}" y="${by - 13}" width="${W - ml - mr + 12}" height="26" rx="6" fill="#f1efe8"/>` + T(ml - 12, by - 2, "Players'", {a: 'end', c: C.sub, fs: 13}) + T(ml - 12, by + 13, 'choices', {a: 'end', c: C.sub, fs: 13});
+    Object.entries(cnt).forEach(([v, k]) => { for (let j = 0; j < k; j++) s += `<circle cx="${X(+v / 100) + (j - (k - 1) / 2) * 10}" cy="${by}" r="4.5" fill="${shareCol(Math.max(+v, 15))}" stroke="#fff" stroke-width="1"/>`; });
+  }
   return s + '</svg>';
 }
 
@@ -713,14 +718,14 @@ function exportCSV() {
   for (let i = 1; i <= R; i++) head.push('share_r' + i, 'submitted_r' + i);
   for (let i = 0; i <= R; i++) head.push('wealth_r' + i);
   for (let c = 1; c <= nc; c++) head.push('commit' + c + '_share', 'commit' + c + '_wealth');
-  head.push('outcomes', 'session');
+  head.push('outcomes', 'session', 'run');
   const lines = [head.join(',')];
   d.players.forEach(p => {
     const row = [JSON.stringify(p.name), p.late];
     for (let i = 1; i <= R; i++) row.push(p.sh[i] ?? '', p.sub[i] ?? '');
     for (let i = 0; i <= R; i++) row.push(p.w[i] ?? '');
     (d.commits || []).forEach(c => { const s = c.shares[p.name]; row.push(s ?? '', s != null && c.path ? simW(s, c.path).toFixed(2) : ''); });
-    row.push(d.outcomes.join(''), d.session);
+    row.push(d.outcomes.join(''), d.session, d.run);
     lines.push(row.join(','));
   });
   const a = document.createElement('a');
