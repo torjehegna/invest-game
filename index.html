@@ -39,6 +39,8 @@ input{font:inherit;padding:10px 12px;border:1px solid #cfcdc5;border-radius:var(
 .ctl input{width:90px;padding:8px}
 .ctl button{padding:8px 12px;font-size:15px}
 .ctl .sp{flex:1}
+.ctl .quiet{display:inline-flex;gap:4px;margin-right:6px}
+.ctl .quiet button{font-size:13px;padding:6px 9px;color:var(--sub);border-color:#e2e0d9;background:transparent}
 .ctl label{font-size:14px;color:var(--sub);display:flex;gap:6px;align-items:center}
 .ctl label input{width:auto}
 .hideCtl{position:fixed;right:10px;bottom:10px;font-size:13px;padding:6px 10px;opacity:.6;z-index:9}
@@ -346,16 +348,22 @@ function brdCtl() {
   if (pa) h += `<button class="primary" data-a="${pa[0]}">${pa[1]}</button>`;
   if (d.phase === 'round_open') h += `<span class="muted" style="font-size:14px">Manual:</span><button data-a="flip" data-o="H">Heads</button><button data-a="flip" data-o="T">Tails</button>`;
   if (d.phase === 'round_closed' && d.round < d.rounds) h += `<button data-a="results">End early: show results</button>`;
-  if (d.phase === 'sim' || d.phase === 'dist') h += `<button data-a="resim">New simulation</button>`;
-  if (d.phase === 'dist') h += `<button data-a="dist-back" data-local="1">Back to simulation</button>`;
+  const hasSim = !!((d.commits || [])[d.commitNo - 1] || {}).path;
+  if ((d.phase === 'sim' || d.phase === 'dist') && hasSim) h += `<button data-a="resim">New simulation</button>`;
+  if (d.phase === 'dist' && hasSim) h += `<button data-a="dist-back" data-local="1">Back to simulation</button>`;
   h += `<label><input type="checkbox" id="lbx" ${showLB ? 'checked' : ''}> Leaderboard</label>`;
   h += `<span class="sp"></span><span class="err" style="margin:0">${esc(msg)}</span>`;
+  h += `<span class="quiet"><button data-a="back">← Back</button><button data-a="jump" data-to="commit">Skip to fixed share</button><button data-a="jump" data-to="dist">Skip to distributions</button></span>`;
   h += `<button id="csv">Export CSV</button><button data-a="new">New session</button><button id="hide">Hide controls</button>`;
   el.innerHTML = h;
   $('#pin').oninput = e => { pin = e.target.value; localStorage.setItem('ig_pin', pin); };
   el.querySelectorAll('button[data-a]').forEach(b => b.onclick = () => {
     if (b.dataset.a === 'dist-back') { data.phase = 'sim'; data.simStart = nowS() - 1e7; brdRender(); return; }
-    teach(b.dataset.a, b.dataset.o ? {o: b.dataset.o} : null);
+    const a = b.dataset.a;
+    if (a === 'back' && data && data.phase === 'round_closed' && !confirm('Undo the last coin flip? The students keep their choices for this round.')) return;
+    if (a === 'back' && data && ['commit_closed', 'sim', 'dist'].indexOf(data.phase) >= 0 && (data.commits || []).length && !confirm('Reopen the fixed-share choice? The simulations are discarded.')) return;
+    if (a === 'jump' && !confirm(b.dataset.to === 'commit' ? 'Skip straight to the fixed-share game?' : 'Skip straight to the distributions?')) return;
+    teach(a, b.dataset.o ? {o: b.dataset.o} : b.dataset.to ? {to: b.dataset.to} : null);
   });
   $('#lbx').onchange = e => { showLB = e.target.checked; localStorage.setItem('ig_lb', showLB ? '1' : '0'); brdRender(true); };
   $('#csv').onclick = exportCSV;
@@ -378,8 +386,8 @@ function brdRender(force) {
   if (simRAF) { cancelAnimationFrame(simRAF); simRAF = 0; }
   if (!d || d.phase === 'none') { st.innerHTML = `<div class="huge">Investment game</div><p class="center sub">Enter the PIN and press “New session”.</p>`; return; }
   const P = d.players || [];
-  if (d.phase === 'round_closed' && coinShown !== d.outcomes.length) {
-    coinShown = d.outcomes.length;
+  if (d.phase === 'round_closed' && coinShown !== d.outcomes.length + ':' + d.revealAt) {
+    coinShown = d.outcomes.length + ':' + d.revealAt;
     if (nowS() < d.revealAt) { coinEnd = Date.now() + COIN_SPIN + COIN_HOLD; setTimeout(() => brdRender(true), COIN_SPIN + COIN_HOLD + 30); }
   }
   const flipping = d.phase === 'round_closed' && Date.now() < coinEnd;
@@ -417,7 +425,7 @@ function brdRender(force) {
     h += `<div class="${showLB ? 'three' : 'two'}" style="--fitH:calc(100vh - 330px)">`;
     if (showLB) h += `<div class="panel">${leaderboard(P.filter(p => p.w[r] != null).map(p => [p.name, p.w[r]]))}</div>`;
     h += `<div class="panel"><p class="cap">Fixed shares on the same ${r} coin flips</p>${shadowChart(P, r, d)}</div>`;
-    h += `<div class="panel"><p class="cap">Average share after a loss and after a gain</p>${slopeChart(P, d)}</div></div>`;
+    h += `<div class="panel"><p class="cap">Change in share from one round to the next. Each dot is one choice.</p>${changeChart(P, d)}</div></div>`;
     st.innerHTML = h; return;
   }
   const c = (d.commits || [])[d.commitNo - 1] || {shares: {}};
@@ -546,24 +554,30 @@ function shadowChart(P, r, d) {
   return s + '</svg>';
 }
 
-function slopeChart(P, d) {
-  const rows = [];
-  P.forEach(p => {
-    const aw = [], al = [];
-    for (let i = 2; i <= d.round; i++) {
-      if (p.sh[i] == null || p.sh[i - 1] == null || !p.sub[i]) continue; // played both rounds and chose actively
-      (d.outcomes[i - 2] === 'H' ? aw : al).push(p.sh[i]);
-    }
-    if (aw.length && al.length) rows.push([mean(al), mean(aw)]);
-  });
-  if (!rows.length) return `<p class="sub" style="font-size:18px;margin:40px 10px">Needs at least one gain and one loss before the last round.</p>`;
-  const W = 420, H = 330, ml = 56, mr = 30, mt = 36, mb = 40, x0 = ml + 30, x1 = W - mr - 30, y = f => mt + (H - mt - mb) * (1 - f / 100);
+function changeChart(P, d) {
+  const ch = {H: [], T: []};
+  P.forEach(p => { for (let i = 2; i <= d.round; i++) { if (p.sh[i] == null || p.sh[i - 1] == null || !p.sub[i]) continue; ch[d.outcomes[i - 2]].push(p.sh[i] - p.sh[i - 1]); } });
+  const W = 520, H = 470, ml = 62, mr = 10, mt = 16, plotB = 360, Y = v => mt + (plotB - mt) * (1 - (v + 100) / 200);
+  const cols = {H: [ml + (W - ml - mr) * 0.25, C.gain, 'After a gain'], T: [ml + (W - ml - mr) * 0.75, C.loss, 'After a loss']};
+  const lim = Math.max(30, ...ch.H.map(Math.abs), ...ch.T.map(Math.abs)), top = Math.min(100, Math.ceil(lim / 25) * 25 + (lim % 25 === 0 ? 0 : 0));
+  const YY = v => mt + (plotB - mt) * (1 - (v + top) / (2 * top));
   let s = `<svg viewBox="0 0 ${W} ${H}" class="fit">`;
-  [0, 25, 50, 75, 100].forEach(f => s += `<line x1="${ml}" x2="${W - mr}" y1="${y(f)}" y2="${y(f)}" stroke="${C.grid}"/>` + T(ml - 8, y(f) + 5, f + '%', {a: 'end'}));
-  s += T(x0, H - 12, 'After a loss', {a: 'middle', c: C.sub}) + T(x1, H - 12, 'After a gain', {a: 'middle', c: C.sub});
-  let up = 0;
-  rows.forEach(r => { const u = r[1] > r[0] + 2; if (u) up++; const c = u ? C.accent : C.grey; s += `<line x1="${x0}" x2="${x1}" y1="${y(r[0])}" y2="${y(r[1])}" stroke="${c}" stroke-opacity="${u ? .7 : .5}" stroke-width="2"/><circle cx="${x0}" cy="${y(r[0])}" r="4" fill="${c}"/><circle cx="${x1}" cy="${y(r[1])}" r="4" fill="${c}"/>`; });
-  s += T(W / 2, 16, `${up} of ${rows.length} took more risk after a gain`, {a: 'middle', c: C.ink, fs: 15, w: 500});
+  const step = top >= 75 ? 25 : top >= 50 ? 25 : 10;
+  for (let v = -top; v <= top + 1e-9; v += step) s += `<line x1="${ml}" x2="${W - mr}" y1="${YY(v)}" y2="${YY(v)}" stroke="${C.grid}"/>` + T(ml - 8, YY(v) + 5, (v > 0 ? '+' : '') + v + ' pp', {a: 'end', fs: 13});
+  const colW = (W - ml - mr) / 2 - 16, dx = 9, per = Math.max(6, Math.floor(colW / dx)), dy = 8;
+  ['H', 'T'].forEach(o => {
+    const [x0, col, lab] = cols[o], a = ch[o];
+    s += T(x0, plotB + 26, lab, {a: 'middle', c: col, fs: 17, w: 500});
+    if (!a.length) { s += T(x0, YY(0) - 12, o === 'H' ? 'No gains before the last round' : 'No losses before the last round', {a: 'middle', fs: 14}); return; }
+    const cnt = {}; a.forEach(v => cnt[v] = (cnt[v] || 0) + 1);
+    Object.entries(cnt).forEach(([v, k]) => { const rows = Math.ceil(k / per); let i = 0;
+      for (let rr = 0; rr < rows; rr++) { const n = Math.min(per, k - i), yo = (rr - (rows - 1) / 2) * dy;
+        for (let j = 0; j < n; j++, i++) s += `<circle cx="${x0 + (j - (n - 1) / 2) * dx}" cy="${YY(+v) + yo}" r="3.8" fill="${col}" fill-opacity=".65"/>`; } });
+    const same = a.filter(v => v === 0).length, m = mean(a), by = plotB + 44;
+    s += `<rect x="${x0 - colW / 2}" y="${by}" width="${colW}" height="52" rx="8" fill="#f4f3ef"/>`;
+    s += T(x0 - colW / 2 + 12, by + 21, 'Kept the same share', {c: C.sub, fs: 14}) + T(x0 + colW / 2 - 12, by + 21, Math.round(100 * same / a.length) + '%', {a: 'end', c: C.ink, fs: 14, w: 600});
+    s += T(x0 - colW / 2 + 12, by + 42, 'Average change', {c: C.sub, fs: 14}) + T(x0 + colW / 2 - 12, by + 42, (m > 0 ? '+' : m < 0 ? '−' : '') + Math.abs(Math.round(m)) + ' pp', {a: 'end', c: C.ink, fs: 14, w: 600});
+  });
   return s + '</svg>';
 }
 
